@@ -69,6 +69,15 @@ npmmirror（npm / Node / Git for Windows 二进制镜像）→ npmjs / nodejs.or
 - **如何升级**：下载新版安装包重跑 `安装.cmd`。若用 `npm i -g @moonshot-ai/kimi-code@latest` 升级会得到**英文原版**。
 - **想恢复英文原版**：`卸载.cmd` 后运行官方安装器 `irm https://code.kimi.com/kimi-code/install.ps1 | iex`。
 
+## 配套工具：模型供应商添加器（GUI）
+
+[`tools/KimiModelAdder.exe`](tools/KimiModelAdder.exe)（源码 [`tools/KimiModelAdder.cs`](tools/KimiModelAdder.cs)，用系统自带 csc 即可编译）：双击运行——
+
+1. 填写供应商 ID、Base URL、API Key
+2. 点 **获取模型列表**（自动请求 `GET {base}/models`）
+3. 勾选要添加的模型、选好默认模型、上下文/输出上限
+4. 点 **写入 config.toml**：自动生成 `[models.*]` 别名（camelCase）与 `[providers.*]` 配置，幂等合并，不破坏已有配置
+
 ## 卸载
 
 双击 **`卸载.cmd`**：默认保留用户数据（配置 / 会话 / 登录态）；彻底清除加 `-PurgeAll`（含本包安装的 PortableGit）。
