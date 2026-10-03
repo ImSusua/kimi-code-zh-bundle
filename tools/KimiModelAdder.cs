@@ -1,15 +1,10 @@
-// KimiModelAdder - Kimi Code 配置管理器（GUI，覆盖 CLI 可配置的全部设置项）
-// Tab1 供应商与模型（获取/搜索/全选/默认模型/删除供应商）
-// Tab2 思考与子模型（[thinking] / [secondary_model]）
-// Tab3 权限模式（[permission]）
-// Tab4 界面 tui.toml（主题/TUI模式/mermaid/latex/编辑器/通知/更新/状态栏…）
-// Tab5 高级（实验性 flags / 任意 TOML 段直接编辑）
+// KimiModelAdder - Kimi Code 配置管理器（GUI，小白友好版）
+// 侧边栏导航 + 卡片式布局 + 分步引导 + 帮助页，覆盖 CLI 可配置的全部设置项
 // 编译（系统自带 csc，C# 5 语法）：
 //   csc -target:winexe -out:KimiModelAdder.exe -r:System.dll -r:System.Core.dll
 //       -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Web.Extensions.dll
 //       -r:System.Net.Http.dll KimiModelAdder.cs
-// 命令行：--selftest [config路径]
-//         --fetchtest <base_url> <api_key>
+// 命令行：--selftest [config路径] | --fetchtest <base_url> <api_key>
 //         --apply <providerId> <base_url> <api_key> <模型ID,逗号分隔> [默认模型ID] [配置路径]
 using System;
 using System.Collections.Generic;
@@ -29,13 +24,13 @@ namespace KimiModelAdder
     internal class Kv
     {
         public string Key;
-        public string Value; // 保留原始写法（含引号或数字）
+        public string Value;
         public Kv(string key, string value) { Key = key; Value = value; }
     }
 
     internal class TomlBlock
     {
-        public string Name = "";            // ""=根, "providers.susu", "models.x", "providers.susu.models"
+        public string Name = "";
         public bool IsArrayTable;
         public List<Kv> Items = new List<Kv>();
         public List<string> RawLines = new List<string>();
@@ -111,7 +106,6 @@ namespace KimiModelAdder
             return "\"" + (s == null ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"")) + "\"";
         }
 
-        // 解析 TOML 字符串数组（单行 ["a","b"]）
         public static List<string> ParseStringArray(string raw)
         {
             var list = new List<string>();
@@ -139,7 +133,6 @@ namespace KimiModelAdder
             return s.Replace("\\\\", "\u0001").Replace("\\\"", "\"").Replace("\u0001", "\\");
         }
 
-        // 托管写入：providers.<id> 块 + models.<别名> 块 + 根 default_*
         // 关键：根 default_model 必须是 [models.<别名>] 的别名键，不能是原始模型 ID
         public static void MergeProvider(List<TomlBlock> blocks, string id, string baseUrl, string apiKey,
             List<ModelInfo> models, int maxContext, int maxOutput, string defaultAlias, string defaultModelId)
@@ -189,7 +182,6 @@ namespace KimiModelAdder
             }
         }
 
-        // 托管写入：替换/新建一个普通段（保留其余块）；keys 为 null 的键删除
         public static void UpsertSection(List<TomlBlock> blocks, string name, List<Kv> items)
         {
             var old = Find(blocks, name);
@@ -297,35 +289,41 @@ namespace KimiModelAdder
 
     internal class MainForm : Form
     {
-        private const string Efforts = "off;low;medium;high";
+        private static readonly Color Accent = Color.FromArgb(79, 110, 247);
+        private static readonly Color AccentLight = Color.FromArgb(238, 242, 255);
+        private static readonly Color PageBg = Color.FromArgb(245, 246, 250);
+        private static readonly Color TextMain = Color.FromArgb(31, 41, 55);
+        private static readonly Color TextSub = Color.FromArgb(107, 114, 128);
+        private static readonly Color OkGreen = Color.FromArgb(22, 163, 74);
+        private static readonly Color ErrRed = Color.FromArgb(220, 38, 38);
+
         private readonly string cfgPath;
         private readonly string tuiPath;
+        private readonly List<Panel> pages = new List<Panel>();
+        private readonly List<Button> navButtons = new List<Button>();
 
-        // Tab1
+        // 供应商与模型
         private TextBox txtProvider, txtBase, txtKey, txtSearch;
         private CheckBox chkShow;
-        private Button btnFetch, btnApply, btnOpenCfg, btnAll, btnNone, btnDelProvider, btnReload;
+        private Button btnFetch, btnApply, btnOpenCfg, btnAll, btnNone, btnDelProvider, btnReload, btnTest;
         private CheckedListBox clbModels;
         private ComboBox cboDefault;
         private NumericUpDown numContext, numOutput;
-        private Label lblStatus;
+        private Label lblStatus, lblNavTitle;
         private ListBox lstProviders;
-        // Tab2
+        // 思考与子模型
         private CheckBox chkThinking, chkSecForce;
         private ComboBox cboEffort;
         private TextBox txtKeep, txtSecModel;
-        private Button btnSaveThink;
-        // Tab3
+        // 权限
         private RadioButton rbManual, rbYolo, rbAuto;
-        private Button btnSavePerm;
-        // Tab4
+        // 界面
         private ComboBox cboTheme, cboTuiMode, cboMermaid, cboNotifCond;
         private TextBox txtEditor, txtStatusItems;
         private CheckBox chkLatex, chkPasteBurst, chkCacheHint, chkSurvey, chkNotif, chkAutoUpgrade;
-        private Button btnSaveTui;
-        // Tab5
+        private Button btnSaveTui, btnSaveRaw;
+        // 高级
         private TextBox txtFlags, txtRawSection, txtRawBody;
-        private Button btnSaveRaw;
         private TextBox txtLog;
 
         private List<string> allIds = new List<string>();
@@ -339,30 +337,88 @@ namespace KimiModelAdder
             tuiPath = Path.Combine(home, "tui.toml");
 
             Text = "Kimi Code 配置管理器";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(860, 700);
+            ClientSize = new Size(940, 720);
             Font = new Font("Microsoft YaHei UI", 9F);
+            BackColor = PageBg;
 
-            var tabs = new TabControl { Location = new Point(8, 8), Size = new Size(844, 596) };
+            // ================= 侧边栏 =================
+            var sidebar = new Panel { Dock = DockStyle.Left, Width = 208, BackColor = Color.White };
+            var brand1 = new Label { Text = "Kimi Code", Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 20), AutoSize = true };
+            var brand2 = new Label { Text = "配置管理器 · 全中文", Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = TextSub, Location = new Point(20, 50), AutoSize = true };
+            sidebar.Controls.Add(brand1);
+            sidebar.Controls.Add(brand2);
+            var navTitles = new[] { "📡  供应商与模型", "🧠  思考与子模型", "🔒  权限模式", "🎨  界面偏好", "🧩  高级", "❓  使用帮助" };
+            for (int i = 0; i < navTitles.Length; i++)
+            {
+                var idx = i;
+                var b = new Button
+                {
+                    Text = navTitles[i],
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Padding = new Padding(18, 0, 0, 0),
+                    FlatStyle = FlatStyle.Flat,
+                    Size = new Size(208, 46),
+                    Location = new Point(0, 84 + i * 48),
+                    BackColor = Color.White,
+                    ForeColor = TextMain,
+                    Font = new Font("Microsoft YaHei UI", 9.5F),
+                    Cursor = Cursors.Hand
+                };
+                b.FlatAppearance.BorderSize = 0;
+                b.FlatAppearance.MouseOverBackColor = AccentLight;
+                b.Click += delegate { ShowPage(idx); };
+                navButtons.Add(b);
+                sidebar.Controls.Add(b);
+            }
+            var lblSide = new Label { Text = "配置对所有目录生效", Font = new Font("Microsoft YaHei UI", 8F), ForeColor = TextSub, Location = new Point(20, 660), AutoSize = true };
+            sidebar.Controls.Add(lblSide);
+            Controls.Add(sidebar);
 
-            // ---------- Tab1 供应商与模型 ----------
-            var tab1 = new TabPage("供应商与模型");
-            var lbl1 = new Label { Text = "供应商 ID:", Location = new Point(14, 14), AutoSize = true };
-            txtProvider = new TextBox { Location = new Point(100, 10), Width = 150, Text = "susu" };
-            var lbl2 = new Label { Text = "Base URL:", Location = new Point(272, 14), AutoSize = true };
-            txtBase = new TextBox { Location = new Point(348, 10), Width = 470 };
-            var lbl3 = new Label { Text = "API Key:", Location = new Point(14, 48), AutoSize = true };
-            txtKey = new TextBox { Location = new Point(100, 44), Width = 600, UseSystemPasswordChar = true };
-            chkShow = new CheckBox { Text = "显示", Location = new Point(716, 44), AutoSize = true };
+            // ================= 内容区 =================
+            var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, Padding = new Padding(12, 12, 12, 8) };
+
+            // 日志（底部）
+            txtLog = new TextBox { Dock = DockStyle.Bottom, Size = new Size(860, 96), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft YaHei UI", 8.5F) };
+            contentHost.Controls.Add(txtLog);
+
+            for (int i = 0; i < 6; i++)
+            {
+                var p = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = PageBg, Visible = false };
+                pages.Add(p);
+                contentHost.Controls.Add(p);
+            }
+            Controls.Add(contentHost);
+
+            // ================= 页 1：供应商与模型 =================
+            var p1 = pages[0];
+            PageHeader(p1, "供应商与模型", "三步接入你的中转/供应商：填写信息 → 获取模型 → 勾选写入");
+            int y1 = 84;
+            Card(p1, 14, y1, 700, 150, "① 填写供应商信息", "这些信息由你的模型服务商（中转站）提供");
+            txtProvider = new TextBox { Location = new Point(150, 34), Width = 140, Text = "susu" };
+            txtBase = new TextBox { Location = new Point(150, 70), Width = 430 };
+            txtKey = new TextBox { Location = new Point(150, 106), Width = 430, UseSystemPasswordChar = true };
+            chkShow = new CheckBox { Text = "显示", Location = new Point(590, 104), AutoSize = true, ForeColor = TextSub };
             chkShow.CheckedChanged += delegate { txtKey.UseSystemPasswordChar = !chkShow.Checked; };
-            btnFetch = new Button { Text = "获取模型列表", Location = new Point(14, 78), Size = new Size(130, 30) };
-            lblStatus = new Label { Text = "", Location = new Point(154, 84), AutoSize = true, ForeColor = Color.DimGray };
-            var lblModels = new Label { Text = "模型（勾选要添加的）:", Location = new Point(14, 116), AutoSize = true };
-            txtSearch = new TextBox { Location = new Point(14, 136), Width = 300 };
-            btnAll = new Button { Text = "全选", Location = new Point(326, 134), Size = new Size(72, 25) };
-            btnNone = new Button { Text = "全不选", Location = new Point(402, 134), Size = new Size(72, 25) };
-            clbModels = new CheckedListBox { Location = new Point(14, 166), Size = new Size(460, 260), CheckOnClick = true };
+            FieldLabel(p1, "供应商 ID", 14, 36, "仅字母数字-和_，重复写入会覆盖同 ID");
+            FieldLabel(p1, "Base URL", 14, 72, "一般以 /v1 结尾，例如 https://api.example.com/v1");
+            FieldLabel(p1, "API Key", 14, 108, "服务商提供的密钥，只保存在本机配置里");
+            p1.Controls.AddRange(new Control[] { txtProvider, txtBase, txtKey, chkShow });
+            y1 += 162;
+
+            Card(p1, 14, y1, 700, 268, "② 获取并勾选模型", "点击按钮拉取 /v1/models 列表；可用搜索框过滤，支持全选/全不选");
+            btnFetch = new Button { Text = "获取模型列表", Location = new Point(20, 34), Size = new Size(140, 34) };
+            StylePrimary(btnFetch);
+            btnTest = new Button { Text = "测试连接", Location = new Point(170, 34), Size = new Size(100, 34) };
+            StyleGhost(btnTest);
+            lblStatus = new Label { Text = "", Location = new Point(284, 42), AutoSize = true, ForeColor = TextSub };
+            var lblModels = new Label { Text = "🔍 搜索:", Location = new Point(20, 84), AutoSize = true, ForeColor = TextSub };
+            txtSearch = new TextBox { Location = new Point(88, 80), Width = 260 };
+            btnAll = new Button { Text = "全选", Location = new Point(356, 79), Size = new Size(64, 25) };
+            btnNone = new Button { Text = "全不选", Location = new Point(424, 79), Size = new Size(72, 25) };
+            StyleGhost(btnAll); StyleGhost(btnNone);
+            clbModels = new CheckedListBox { Location = new Point(20, 112), Size = new Size(476, 140), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
             clbModels.ItemCheck += delegate(object s, ItemCheckEventArgs e)
             {
                 try
@@ -373,128 +429,185 @@ namespace KimiModelAdder
                 }
                 catch { }
             };
-            var lblDefault = new Label { Text = "默认模型:", Location = new Point(494, 170), AutoSize = true };
-            cboDefault = new ComboBox { Location = new Point(494, 190), Width = 330, DropDownStyle = ComboBoxStyle.DropDownList };
-            var lblCtx = new Label { Text = "上下文长度:", Location = new Point(494, 230), AutoSize = true };
-            numContext = new NumericUpDown { Location = new Point(494, 250), Width = 130, Maximum = 2000000, Value = 200000, Increment = 1000 };
-            var lblOut = new Label { Text = "最大输出 (0=不限):", Location = new Point(494, 288), AutoSize = true };
-            numOutput = new NumericUpDown { Location = new Point(494, 308), Width = 130, Maximum = 2000000, Value = 65536, Increment = 1024 };
-            btnApply = new Button { Text = "写入全局 config.toml（所有目录生效）", Location = new Point(494, 348), Size = new Size(330, 36) };
-            var lblProvList = new Label { Text = "已配置的供应商（选中可删除）:", Location = new Point(494, 398), AutoSize = true };
-            lstProviders = new ListBox { Location = new Point(494, 418), Size = new Size(330, 96) };
-            btnDelProvider = new Button { Text = "删除选中供应商及其模型", Location = new Point(494, 520), Size = new Size(330, 30) };
-            btnOpenCfg = new Button { Text = "打开配置目录", Location = new Point(14, 434), Size = new Size(140, 28) };
-            btnReload = new Button { Text = "重新读取配置", Location = new Point(164, 434), Size = new Size(140, 28) };
-            var lblG = new Label { Text = "写入的是全局配置文件（KIMI_CODE_HOME 或 %USERPROFILE%\\.kimi-code\\config.toml），对所有工作目录生效。", Location = new Point(14, 556), AutoSize = true, ForeColor = Color.DimGray };
-            tab1.Controls.AddRange(new Control[] { lbl1, txtProvider, lbl2, txtBase, lbl3, txtKey, chkShow, btnFetch, lblStatus, lblModels, txtSearch, btnAll, btnNone, clbModels, lblDefault, cboDefault, lblCtx, numContext, lblOut, numOutput, btnApply, lblProvList, lstProviders, btnDelProvider, btnOpenCfg, btnReload, lblG });
+            var lblDefault = new Label { Text = "默认模型", Location = new Point(516, 116), AutoSize = true, ForeColor = TextMain };
+            cboDefault = new ComboBox { Location = new Point(516, 136), Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
+            var lblCtx = new Label { Text = "上下文长度", Location = new Point(516, 172), AutoSize = true, ForeColor = TextMain };
+            numContext = new NumericUpDown { Location = new Point(516, 192), Width = 130, Maximum = 2000000, Value = 200000, Increment = 1000 };
+            var lblOut = new Label { Text = "最大输出 (0=不限)", Location = new Point(516, 230), AutoSize = true, ForeColor = TextMain };
+            numOutput = new NumericUpDown { Location = new Point(516, 250), Width = 130, Maximum = 2000000, Value = 65536, Increment = 1024 };
+            p1.Controls.AddRange(new Control[] { btnFetch, btnTest, lblStatus, lblModels, txtSearch, btnAll, btnNone, clbModels, lblDefault, cboDefault, lblCtx, numContext, lblOut, numOutput });
+            y1 += 280;
 
-            // ---------- Tab2 思考与子模型 ----------
-            var tab2 = new TabPage("思考与子模型");
-            var gb1 = new GroupBox { Text = "思考 [thinking]", Location = new Point(14, 14), Size = new Size(810, 170) };
-            var chkThinkingL = new Label { Text = "enabled:", Location = new Point(20, 36), AutoSize = true };
-            chkThinking = new CheckBox { Text = "启用思考（默认由模型决定）", Location = new Point(110, 32), AutoSize = true };
-            var lblEffort = new Label { Text = "effort:", Location = new Point(20, 70), AutoSize = true };
-            cboEffort = new ComboBox { Location = new Point(110, 66), Width = 140, DropDownStyle = ComboBoxStyle.DropDown };
+            Card(p1, 14, y1, 700, 128, "③ 确认并写入全局配置", "写入后所有工作目录都能用；重复写入同一供应商 ID 会整体更新");
+            btnApply = new Button { Text = "写入全局配置（✔ 全部目录生效）", Location = new Point(20, 34), Size = new Size(300, 40) };
+            StylePrimary(btnApply);
+            btnReload = new Button { Text = "重新读取配置", Location = new Point(334, 38), Size = new Size(130, 32) };
+            btnOpenCfg = new Button { Text = "打开配置目录", Location = new Point(470, 38), Size = new Size(130, 32) };
+            StyleGhost(btnReload); StyleGhost(btnOpenCfg);
+            var lblProvList = new Label { Text = "已配置的供应商:", Location = new Point(20, 84), AutoSize = true, ForeColor = TextMain };
+            lstProviders = new ListBox { Location = new Point(150, 80), Size = new Size(230, 40), BorderStyle = BorderStyle.FixedSingle };
+            btnDelProvider = new Button { Text = "删除选中的供应商", Location = new Point(390, 82), Size = new Size(150, 30) };
+            StyleGhost(btnDelProvider);
+            p1.Controls.AddRange(new Control[] { btnApply, btnReload, btnOpenCfg, lblProvList, lstProviders, btnDelProvider });
+            var lblG = new Label { Text = "配置文件位置见底部日志；删除供应商会同时移除它的全部模型别名。", Location = new Point(16, y1 + 138), AutoSize = true, ForeColor = TextSub };
+            p1.Controls.Add(lblG);
+
+            // ================= 页 2：思考与子模型 =================
+            var p2 = pages[1];
+            PageHeader(p2, "思考与子模型", "控制模型的思考强度，以及子智能体使用哪个模型");
+            y1 = 84;
+            Card(p2, 14, y1, 700, 168, "思考模式 [thinking]", "让模型在回答前进行更深入的推理");
+            chkThinking = new CheckBox { Text = "启用思考", Location = new Point(20, 38), AutoSize = true };
+            var lblEffort = new Label { Text = "思考强度 effort:", Location = new Point(20, 74), AutoSize = true, ForeColor = TextMain };
+            cboEffort = new ComboBox { Location = new Point(150, 70), Width = 140, DropDownStyle = ComboBoxStyle.DropDown };
             cboEffort.Items.AddRange(new object[] { "off", "low", "medium", "high" });
-            var lblKeep = new Label { Text = "keep:", Location = new Point(20, 104), AutoSize = true };
-            txtKeep = new TextBox { Location = new Point(110, 100), Width = 140 };
-            var lblKeepN = new Label { Text = "（压缩上下文时保留的思考预算，如 20000）", Location = new Point(260, 104), AutoSize = true, ForeColor = Color.DimGray };
-            gb1.Controls.AddRange(new Control[] { chkThinkingL, chkThinking, lblEffort, cboEffort, lblKeep, txtKeep, lblKeepN });
-            var gb2 = new GroupBox { Text = "子智能体次级模型 [secondary_model]", Location = new Point(14, 196), Size = new Size(810, 130) };
-            var lblSec = new Label { Text = "model (别名):", Location = new Point(20, 36), AutoSize = true };
-            txtSecModel = new TextBox { Location = new Point(130, 32), Width = 300 };
-            var lblSec2 = new Label { Text = "留空 = 跟随主模型；填 [models.*] 别名，如 agnes-2-5-flash", Location = new Point(440, 36), AutoSize = true, ForeColor = Color.DimGray };
-            var chkSecForce = new CheckBox { Text = "force（强制子智能体使用，忽略会话级覆盖）", Location = new Point(130, 70), AutoSize = true };
-            gb2.Controls.AddRange(new Control[] { lblSec, txtSecModel, lblSec2, chkSecForce });
-            var btnSave23 = new Button { Text = "写入以上设置", Location = new Point(14, 340), Size = new Size(180, 34) };
-            var lbl23 = new Label { Text = "留空的键不会写入；effort 支持任意值（常用 off/low/medium/high）。", Location = new Point(14, 556), AutoSize = true, ForeColor = Color.DimGray };
-            tab2.Controls.AddRange(new Control[] { gb1, gb2, btnSave23, lbl23 });
+            var lblEffortN = new Label { Text = "常用 off / low / medium / high，留空 = 不设置", Location = new Point(300, 74), AutoSize = true, ForeColor = TextSub };
+            var lblKeep = new Label { Text = "keep 预算:", Location = new Point(20, 110), AutoSize = true, ForeColor = TextMain };
+            txtKeep = new TextBox { Location = new Point(150, 106), Width = 140 };
+            var lblKeepN = new Label { Text = "压缩上下文时保留的思考 token 预算，如 20000；留空 = 不设置", Location = new Point(300, 110), AutoSize = true, ForeColor = TextSub };
+            p2.Controls.AddRange(new Control[] { chkThinking, lblEffort, cboEffort, lblEffortN, lblKeep, txtKeep, lblKeepN });
+            y1 += 182;
+            Card(p2, 14, y1, 700, 128, "子智能体次级模型 [secondary_model]", "后台子智能体（coder / explore 等）使用的模型");
+            txtSecModel = new TextBox { Location = new Point(20, 36), Width = 300 };
+            var lblSec2 = new Label { Text = "填 [models.*] 别名（如 agnes-2-5-flash）；留空 = 跟随主模型", Location = new Point(20, 66), AutoSize = true, ForeColor = TextSub };
+            chkSecForce = new CheckBox { Text = "force：强制所有子智能体使用，忽略会话级覆盖", Location = new Point(20, 90), AutoSize = true };
+            p2.Controls.AddRange(new Control[] { txtSecModel, lblSec2, chkSecForce });
+            var btnSaveThink = new Button { Text = "写入以上设置", Location = new Point(14, y1 + 142), Size = new Size(180, 36) };
+            StylePrimary(btnSaveThink);
+            var lbl23 = new Label { Text = "留空的键不会写入；修改后新会话生效（当前会话用 /reload）。", Location = new Point(210, y1 + 150), AutoSize = true, ForeColor = TextSub };
+            p2.Controls.AddRange(new Control[] { btnSaveThink, lbl23 });
 
-            // ---------- Tab3 权限 ----------
-            var tab3 = new TabPage("权限模式");
-            var lblP = new Label { Text = "permission.mode —— 控制工具执行的批准策略（对应界面：总是询问 / 按需询问 / 从不询问）:", Location = new Point(14, 20), AutoSize = true };
-            var rb1 = new RadioButton { Text = "manual —— 总是询问：执行命令/改文件前都会询问（最安全）", Location = new Point(30, 60), AutoSize = true };
-            var rb2 = new RadioButton { Text = "yolo —— 按需询问：常规编辑与命令自动执行，高风险操作仍询问", Location = new Point(30, 90), AutoSize = true };
-            var rb3 = new RadioButton { Text = "auto —— 从不询问：一切自动运行（无人值守）", Location = new Point(30, 120), AutoSize = true };
-            var pb = new Panel { Location = new Point(14, 44), Size = new Size(800, 110) };
-            pb.Controls.AddRange(new Control[] { rb1, rb2, rb3 });
-            var btnSaveP = new Button { Text = "写入权限模式", Location = new Point(14, 170), Size = new Size(180, 34) };
-            var lblPn = new Label { Text = "写入 [permission] mode = \"…\"；删除该段则恢复默认（manual）。", Location = new Point(14, 556), AutoSize = true, ForeColor = Color.DimGray };
-            tab3.Controls.AddRange(new Control[] { lblP, pb, btnSaveP, lblPn });
+            // ================= 页 3：权限模式 =================
+            var p3 = pages[2];
+            PageHeader(p3, "权限模式", "控制 kimi 执行命令 / 修改文件前要不要先征求你的同意");
+            rbManual = new RadioButton { Text = "总是询问（manual）—— 最安全", Location = new Point(24, 24), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbManualN = new Label { Text = "每条命令、每次改文件都会先问你；适合初次使用或重要项目", Location = new Point(46, 48), AutoSize = true, ForeColor = TextSub };
+            rbYolo = new RadioButton { Text = "按需询问（yolo）—— 推荐", Location = new Point(24, 84), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbYoloN = new Label { Text = "常规编辑与命令自动执行，高风险操作仍会询问", Location = new Point(46, 108), AutoSize = true, ForeColor = TextSub };
+            rbAuto = new RadioButton { Text = "从不询问（auto）—— 无人值守", Location = new Point(24, 144), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbAutoN = new Label { Text = "一切自动运行，不再打断你；适合挂机跑长任务", Location = new Point(46, 168), AutoSize = true, ForeColor = TextSub };
+            var pc = new Panel { Location = new Point(14, 84), Size = new Size(700, 200), BackColor = Color.White };
+            pc.Controls.AddRange(new Control[] { rbManual, rbManualN, rbYolo, rbYoloN, rbAuto, rbAutoN });
+            p3.Controls.Add(pc);
+            var btnSavePerm = new Button { Text = "写入权限模式", Location = new Point(14, 300), Size = new Size(180, 36) };
+            StylePrimary(btnSavePerm);
+            var lblPn = new Label { Text = "写入 [permission] mode；删除该段则恢复默认（manual）。新会话生效。", Location = new Point(210, 308), AutoSize = true, ForeColor = TextSub };
+            p3.Controls.AddRange(new Control[] { btnSavePerm, lblPn });
 
-            // ---------- Tab4 界面 tui.toml ----------
-            var tab4 = new TabPage("界面 tui.toml");
-            int y = 16;
-            Action<string, Control, Control> row = delegate(string name, Control a, Control b)
+            // ================= 页 4：界面偏好 =================
+            var p4 = pages[3];
+            PageHeader(p4, "界面偏好 (tui.toml)", "调整 kimi 终端界面的外观与行为，重启 kimi 后生效");
+            y1 = 84;
+            Card(p4, 14, y1, 700, 420, "外观与行为", "全部写入 " + tuiPath);
+            int y4 = 34;
+            Action<string, Control, string> row = delegate(string name, Control a, string desc)
             {
-                var l = new Label { Text = name, Location = new Point(16, y + 4), AutoSize = true, Width = 170 };
-                a.Location = new Point(190, y);
-                if (b != null) { b.Location = new Point(a.Right + 10, y); tab4.Controls.Add(b); }
-                tab4.Controls.Add(l); tab4.Controls.Add(a);
-                y += 40;
+                var l = new Label { Text = name, Location = new Point(20, y4 + 4), AutoSize = true, ForeColor = TextMain };
+                a.Location = new Point(200, y4);
+                p4.Controls.Add(l); p4.Controls.Add(a);
+                if (desc != null && desc.Length > 0)
+                {
+                    var d = new Label { Text = desc, Location = new Point(360, y4 + 4), AutoSize = true, ForeColor = TextSub };
+                    p4.Controls.Add(d);
+                }
+                y4 += 38;
             };
-            cboTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 160 };
+            cboTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 140 };
             cboTheme.Items.AddRange(new object[] { "auto", "dark", "light" });
-            row("theme 主题:", cboTheme, null);
-            cboTuiMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            row("主题 theme:", cboTheme, "auto 跟随终端 / dark / light");
+            cboTuiMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
             cboTuiMode.Items.AddRange(new object[] { "regular", "fullscreen" });
-            row("tui_mode 布局:", cboTuiMode, null);
-            cboMermaid = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            row("布局 tui_mode:", cboTuiMode, "fullscreen 为实验性的全屏模式");
+            cboMermaid = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
             cboMermaid.Items.AddRange(new object[] { "final", "off" });
-            row("markdown.mermaid:", cboMermaid, null);
-            chkLatex = new CheckBox { Text = "render_latex 渲染 LaTeX 公式", AutoSize = true };
-            row("", chkLatex, null);
-            chkPasteBurst = new CheckBox { Text = "disable_paste_burst 禁用非括号化粘贴连发", AutoSize = true };
-            row("", chkPasteBurst, null);
-            chkCacheHint = new CheckBox { Text = "cache_expiry_hint 缓存过期提醒对话框", AutoSize = true };
-            row("", chkCacheHint, null);
-            chkSurvey = new CheckBox { Text = "disable_feedback_survey 隐藏评分问卷", AutoSize = true };
-            row("", chkSurvey, null);
-            txtEditor = new TextBox { Width = 380 };
-            row("editor.command 外部编辑器:", txtEditor, null);
-            var lblEd = new Label { Text = "（留空用 $VISUAL/$EDITOR）", Location = new Point(580, y - 36), AutoSize = true, ForeColor = Color.DimGray };
-            tab4.Controls.Add(lblEd);
-            chkNotif = new CheckBox { Text = "notifications.enabled 桌面通知", AutoSize = true };
-            cboNotifCond = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            row("Mermaid 图表:", cboMermaid, "final=渲染成图，off=保留源码");
+            chkLatex = new CheckBox { Text = "渲染 LaTeX 公式", AutoSize = true, ForeColor = TextMain };
+            row("LaTeX:", chkLatex, null);
+            chkPasteBurst = new CheckBox { Text = "禁用非括号化粘贴连发", AutoSize = true, ForeColor = TextMain };
+            row("粘贴:", chkPasteBurst, "粘贴多行异常时再开启");
+            chkCacheHint = new CheckBox { Text = "缓存过期提醒对话框", AutoSize = true, ForeColor = TextMain };
+            row("缓存提醒:", chkCacheHint, "关闭后不再弹出续费提示");
+            chkSurvey = new CheckBox { Text = "隐藏会话评分问卷", AutoSize = true, ForeColor = TextMain };
+            row("评分问卷:", chkSurvey, null);
+            txtEditor = new TextBox { Width = 220 };
+            row("外部编辑器:", txtEditor, "留空用 $VISUAL/$EDITOR，Ctrl-G 调用");
+            chkNotif = new CheckBox { Text = "桌面通知", AutoSize = true, ForeColor = TextMain };
+            cboNotifCond = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
             cboNotifCond.Items.AddRange(new object[] { "unfocused", "always" });
-            row("", chkNotif, cboNotifCond);
-            chkAutoUpgrade = new CheckBox { Text = "upgrade.auto_install 后台自动安装更新", AutoSize = true };
-            row("", chkAutoUpgrade, null);
-            var lblSt = new Label { Text = "status_line.items 底栏槽位:", Location = new Point(16, y + 4), AutoSize = true, Width = 170 };
-            txtStatusItems = new TextBox { Location = new Point(190, y), Width = 620 };
-            y += 40;
-            tab4.Controls.Add(lblSt); tab4.Controls.Add(txtStatusItems);
-            btnSaveTui = new Button { Text = "写入 tui.toml", Location = new Point(16, y + 10), Size = new Size(180, 34) };
-            var lblT4 = new Label { Text = "写入 " + tuiPath + "（客户端界面偏好，与 config.toml 分离）", Location = new Point(14, 556), AutoSize = true, ForeColor = Color.DimGray };
-            tab4.Controls.Add(btnSaveTui); tab4.Controls.Add(lblT4);
+            row("通知:", chkNotif, null); cboNotifCond.Location = new Point(380, y4 - 38); p4.Controls.Add(cboNotifCond);
+            chkAutoUpgrade = new CheckBox { Text = "后台自动安装更新", AutoSize = true, ForeColor = TextMain };
+            row("自动更新:", chkAutoUpgrade, null);
+            var lblSt = new Label { Text = "底栏槽位:", Location = new Point(20, y4 + 4), AutoSize = true, ForeColor = TextMain };
+            txtStatusItems = new TextBox { Location = new Point(200, y4), Width = 460 };
+            p4.Controls.Add(lblSt); p4.Controls.Add(txtStatusItems);
+            y4 += 42;
+            btnSaveTui = new Button { Text = "写入 tui.toml", Location = new Point(20, y4), Size = new Size(180, 36) };
+            StylePrimary(btnSaveTui);
+            p4.Controls.Add(btnSaveTui);
 
-            // ---------- Tab5 高级 ----------
-            var tab5 = new TabPage("高级");
-            var lblExp = new Label { Text = "实验性 flags（[experimental]，一行一个）:", Location = new Point(14, 14), AutoSize = true };
-            txtFlags = new TextBox { Location = new Point(14, 36), Size = new Size(810, 90), Multiline = true, ScrollBars = ScrollBars.Vertical };
-            var lblRaw = new Label { Text = "任意 TOML 段直改（覆盖 hooks、workspace 等所有高级段）—— 段名 + 每行 key = value:", Location = new Point(14, 140), AutoSize = true };
-            txtRawSection = new TextBox { Location = new Point(14, 162), Width = 300 };
-            txtRawBody = new TextBox { Location = new Point(14, 192), Size = new Size(810, 220), Multiline = true, ScrollBars = ScrollBars.Vertical };
-            var btnDelSec = new Button { Text = "删除该段", Location = new Point(330, 158), Size = new Size(110, 26) };
-            var btnSaveRaw = new Button { Text = "写入该段", Location = new Point(14, 420), Size = new Size(180, 32) };
-            var lblT5 = new Label { Text = "示例：段名 hooks，正文见官方文档 hooks 配置（TOML 表数组需用 [[段名]]，本框只支持普通段）。", Location = new Point(14, 556), AutoSize = true, ForeColor = Color.DimGray };
-            tab5.Controls.AddRange(new Control[] { lblExp, txtFlags, lblRaw, txtRawSection, btnDelSec, txtRawBody, btnSaveRaw, lblT5 });
+            // ================= 页 5：高级 =================
+            var p5 = pages[4];
+            PageHeader(p5, "高级", "实验性功能与任意配置段的直接编辑，普通用户可以不用");
+            Card(p5, 14, 84, 700, 150, "实验性 flags [experimental]", "一行一个，来自官方公告或 /settings");
+            txtFlags = new TextBox { Location = new Point(20, 34), Size = new Size(660, 80), Multiline = true, ScrollBars = ScrollBars.Vertical };
+            p5.Controls.Add(txtFlags);
+            Card(p5, 14, 250, 700, 250, "直接编辑任意 TOML 段", "段名 + 每行 key = value（如 hooks、workspace 等高级段）");
+            txtRawSection = new TextBox { Location = new Point(20, 32), Width = 280 };
+            var btnDelSec = new Button { Text = "删除该段", Location = new Point(320, 30), Size = new Size(110, 26) };
+            StyleGhost(btnDelSec);
+            txtRawBody = new TextBox { Location = new Point(20, 64), Size = new Size(660, 130), Multiline = true, ScrollBars = ScrollBars.Vertical };
+            btnSaveRaw = new Button { Text = "写入该段", Location = new Point(20, 200), Size = new Size(140, 32) };
+            StylePrimary(btnSaveRaw);
+            p5.Controls.AddRange(new Control[] { txtRawSection, btnDelSec, txtRawBody, btnSaveRaw });
+            var lblT5 = new Label { Text = "写入前请确认段名正确；表数组 [[段名]] 不在此支持范围。", Location = new Point(20, 510), AutoSize = true, ForeColor = TextSub };
+            p5.Controls.Add(lblT5);
 
-            tabs.TabPages.AddRange(new TabPage[] { tab1, tab2, tab3, tab4, tab5 });
-            Controls.Add(tabs);
-
-            txtLog = new TextBox { Location = new Point(8, 608), Size = new Size(844, 84), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
-            Controls.Add(txtLog);
+            // ================= 页 6：帮助 =================
+            var p6 = pages[5];
+            PageHeader(p6, "使用帮助", "常见问题与排错对照");
+            var help = new TextBox
+            {
+                Location = new Point(14, 84), Size = new Size(700, 480),
+                Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+                BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Microsoft YaHei UI", 9F)
+            };
+            help.Text = "【配置文件位置】\r\n"
+                + "  " + cfgPath + "\r\n"
+                + "  " + tuiPath + "\r\n"
+                + "  （设置了 KIMI_CODE_HOME 环境变量时会用它的位置）\r\n\r\n"
+                + "【如何启动 kimi】\r\n"
+                + "  新开一个终端窗口 → cd 到你的项目目录 → 输入 kimi 回车\r\n"
+                + "  第一次使用在 kimi 里输入 /login 登录，或 /provider 添加供应商\r\n\r\n"
+                + "【常见报错对照】\r\n"
+                + "  Model \"...\" is not configured in config.toml\r\n"
+                + "      → config.toml 里 default_model 指向的别名不存在；用本工具重新写入即可\r\n"
+                + "  401 Invalid token\r\n"
+                + "      → API Key 失效，去服务商后台重新生成，回到本工具第①步重新写入\r\n"
+                + "  403 预扣费失败 / 余额不足\r\n"
+                + "      → 中转账户余额不够，充值即可，配置无需改动\r\n"
+                + "  400 max_tokens 不能超过 65536\r\n"
+                + "      → 把\"最大输出\"调到 65536 或更小\r\n"
+                + "  Git Bash not found\r\n"
+                + "      → 安装 Git for Windows，或重开终端让 KIMI_SHELL_PATH 生效\r\n"
+                + "  无法连接 / Connection error\r\n"
+                + "      → Base URL 写错、服务商宕机或被墙，可在浏览器打开服务商面板确认\r\n\r\n"
+                + "【小提示】\r\n"
+                + "  · 本工具写的是全局配置，对所有项目目录生效\r\n"
+                + "  · 重复写入同一供应商 ID = 整体更新，不会产生重复配置\r\n"
+                + "  · 修改后新开的 kimi 会话生效；当前会话输入 /reload 可立即应用";
+            p6.Controls.Add(help);
 
             // ---------- 事件 ----------
             btnFetch.Click += OnFetch;
+            btnTest.Click += OnTest;
             btnApply.Click += OnApply;
             txtSearch.TextChanged += delegate { RenderModels(); };
             btnAll.Click += delegate { SetAllVisible(true); };
             btnNone.Click += delegate { SetAllVisible(false); };
-            btnReload.Click += delegate { LoadConfigToUi(); };
+            btnReload.Click += delegate { LoadConfigToUi(); Log("已重新读取配置。"); };
             btnDelProvider.Click += OnDeleteProvider;
-            btnSave23.Click += delegate
+            btnSaveThink.Click += delegate
             {
                 try
                 {
@@ -515,19 +628,20 @@ namespace KimiModelAdder
                     }
                     else TomlConfig.RemoveSection(blocks, "secondary_model");
                     TomlConfig.Save(blocks, cfgPath);
-                    Log("已写入 thinking/secondary_model → " + cfgPath);
+                    Log("已写入 thinking/secondary_model ✓");
                 }
                 catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
-            btnSaveP.Click += delegate
+            btnSavePerm.Click += delegate
             {
                 try
                 {
                     var blocks = OpenConfig();
-                    string mode = rb1.Checked ? "manual" : (rb2.Checked ? "yolo" : "auto");
+                    string mode = rbManual.Checked ? "manual" : (rbYolo.Checked ? "yolo" : "auto");
                     TomlConfig.UpsertSection(blocks, "permission", new List<Kv> { new Kv("mode", TomlConfig.Q(mode)) });
                     TomlConfig.Save(blocks, cfgPath);
-                    Log("已写入 [permission] mode = \"" + mode + "\"");
+                    Log("已写入 [permission] mode = \"" + mode + "\" ✓");
+                    MessageBox.Show("已写入权限模式：" + mode + "\r\n新开的 kimi 会话生效。", "完成");
                 }
                 catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
@@ -569,7 +683,8 @@ namespace KimiModelAdder
                     }
                     else TomlConfig.RemoveSection(blocks, "status_line");
                     TomlConfig.Save(blocks, tuiPath);
-                    Log("已写入 " + tuiPath + "（重启 Kimi Code 生效）");
+                    Log("已写入 " + tuiPath + " ✓（重启 kimi 生效）");
+                    MessageBox.Show("界面偏好已写入，重启 kimi 后生效。", "完成");
                 }
                 catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
@@ -588,7 +703,7 @@ namespace KimiModelAdder
                     }
                     TomlConfig.UpsertSection(blocks, name, items);
                     TomlConfig.Save(blocks, cfgPath);
-                    Log("已写入 [" + name + "] → " + cfgPath);
+                    Log("已写入 [" + name + "] ✓");
                 }
                 catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
@@ -601,7 +716,7 @@ namespace KimiModelAdder
                     var blocks = OpenConfig();
                     TomlConfig.RemoveSection(blocks, name);
                     TomlConfig.Save(blocks, cfgPath);
-                    Log("已删除 [" + name + "]");
+                    Log("已删除 [" + name + "] ✓");
                 }
                 catch (Exception ex) { Log("失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
@@ -611,9 +726,75 @@ namespace KimiModelAdder
                 catch { }
             };
 
+            ShowPage(0);
             Log("全局配置: " + cfgPath);
-            Log("界面配置: " + tuiPath);
-            LoadConfigToUi();
+            Log(File.Exists(cfgPath) ? "已读取当前配置。" : "首次使用：按 ① 填写 → ② 获取模型 → ③ 写入 三步即可完成配置。");
+        }
+
+        private void ShowPage(int idx)
+        {
+            for (int i = 0; i < pages.Count; i++) pages[i].Visible = (i == idx);
+            for (int i = 0; i < navButtons.Count; i++)
+            {
+                if (i == idx) { navButtons[i].BackColor = AccentLight; navButtons[i].ForeColor = Accent; navButtons[i].Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold); }
+                else { navButtons[i].BackColor = Color.White; navButtons[i].ForeColor = TextMain; navButtons[i].Font = new Font("Microsoft YaHei UI", 9.5F); }
+            }
+        }
+
+        private void PageHeader(Panel p, string title, string sub)
+        {
+            var t = new Label { Text = title, Font = new Font("Microsoft YaHei UI", 12.5F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(14, 12), AutoSize = true };
+            var s = new Label { Text = sub, Font = new Font("Microsoft YaHei UI", 9F), ForeColor = TextSub, Location = new Point(16, 44), AutoSize = true };
+            p.Controls.Add(t);
+            p.Controls.Add(s);
+        }
+
+        private void Card(Panel page, int x, int y, int w, int h, string title, string desc)
+        {
+            var card = new Panel { Location = new Point(x, y), Size = new Size(w, h), BackColor = Color.White };
+            var t = new Label { Text = title, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(18, 10), AutoSize = true };
+            card.Controls.Add(t);
+            if (desc != null && desc.Length > 0)
+            {
+                var d = new Label { Text = desc, Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = TextSub, Location = new Point(18, 32), AutoSize = true };
+                card.Controls.Add(d);
+            }
+            card.Paint += delegate(object s, PaintEventArgs e)
+            {
+                e.Graphics.DrawRectangle(new Pen(Color.FromArgb(228, 231, 236)), 0, 0, card.Width - 1, card.Height - 1);
+            };
+            page.Controls.Add(card);
+        }
+
+        private void FieldLabel(Panel page, string name, int x, int y, string desc)
+        {
+            var l = new Label { Text = name, Location = new Point(x, y), AutoSize = true, ForeColor = TextMain };
+            page.Controls.Add(l);
+            if (desc != null)
+            {
+                var tip = new ToolTip();
+                tip.SetToolTip(l, desc);
+                tip.SetToolTip(page, desc);
+            }
+        }
+
+        private void StylePrimary(Button b)
+        {
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 0;
+            b.BackColor = Accent;
+            b.ForeColor = Color.White;
+            b.Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
+            b.Cursor = Cursors.Hand;
+        }
+
+        private void StyleGhost(Button b)
+        {
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderColor = Color.FromArgb(209, 213, 219);
+            b.BackColor = Color.White;
+            b.ForeColor = TextMain;
+            b.Cursor = Cursors.Hand;
         }
 
         private List<TomlBlock> OpenConfig()
@@ -641,6 +822,7 @@ namespace KimiModelAdder
                     if (th != null)
                     {
                         var en = TomlConfig.GetValue(th, "enabled");
+                        if (en != null) chkThinking.Checked = en == "true";
                         cboEffort.Text = TomlConfig.GetValue(th, "effort") ?? "";
                         txtKeep.Text = TomlConfig.GetValue(th, "keep") ?? "";
                     }
@@ -661,7 +843,7 @@ namespace KimiModelAdder
                     {
                         cboTheme.Text = TomlConfig.GetValue(r, "theme") ?? "";
                         var tm = TomlConfig.GetValue(r, "tui_mode");
-                        if (tm == "fullscreen") cboTuiMode.SelectedIndex = 1; else cboTuiMode.SelectedIndex = 0;
+                        if (tm == "fullscreen") cboTuiMode.SelectedIndex = 1; else if (tm == "regular") cboTuiMode.SelectedIndex = 0;
                         var la = TomlConfig.GetValue(r, "render_latex");
                         if (la != null) chkLatex.Checked = la == "true";
                         var pbv = TomlConfig.GetValue(r, "disable_paste_burst");
@@ -686,14 +868,12 @@ namespace KimiModelAdder
                     var up = TomlConfig.Find(tb, "upgrade");
                     if (up != null) { var av = TomlConfig.GetValue(up, "auto_install"); if (av != null) chkAutoUpgrade.Checked = av == "true"; }
                     var st = TomlConfig.Find(tb, "status_line");
-                    if (st != null)
+                    if (st != null && st.Items.Count > 0)
                     {
-                        var raw = st.Items.Count > 0 ? st.Items[0].Value : null;
-                        var arr = TomlConfig.ParseStringArray(raw);
+                        var arr = TomlConfig.ParseStringArray(st.Items[0].Value);
                         txtStatusItems.Text = string.Join(", ", arr.ToArray());
                     }
                 }
-                Log("已读取当前配置。");
             }
             catch (Exception ex) { Log("读取配置失败: " + ex.Message); }
         }
@@ -716,7 +896,7 @@ namespace KimiModelAdder
                 foreach (var b in toRemove) blocks.Remove(b);
                 TomlConfig.Save(blocks, cfgPath);
                 LoadConfigToUi();
-                Log("已删除供应商 " + id);
+                Log("已删除供应商 " + id + " ✓");
             }
             catch (Exception ex) { Log("删除失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
         }
@@ -755,21 +935,21 @@ namespace KimiModelAdder
             var baseUrl = txtBase.Text.Trim();
             var key = txtKey.Text.Trim();
             if (baseUrl.Length == 0 || key.Length == 0) { MessageBox.Show("请先填写 Base URL 与 API Key"); return; }
-            btnFetch.Enabled = false;
-            lblStatus.Text = "正在获取…";
+            btnFetch.Enabled = false; btnTest.Enabled = false;
+            lblStatus.Text = "正在获取…"; lblStatus.ForeColor = TextSub;
             var self = this;
             Task.Factory.StartNew(delegate { return Api.FetchModels(baseUrl, key); })
                 .ContinueWith(delegate(Task<List<string>> t)
             {
                 self.BeginInvoke(new Action(delegate
                 {
-                    btnFetch.Enabled = true;
+                    btnFetch.Enabled = true; btnTest.Enabled = true;
                     if (t.IsFaulted)
                     {
                         var ex = t.Exception.Flatten().InnerException;
-                        lblStatus.Text = "获取失败";
+                        lblStatus.Text = "获取失败"; lblStatus.ForeColor = ErrRed;
                         Log("获取模型失败: " + ex.Message);
-                        MessageBox.Show("获取模型失败:\r\n" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        MessageBox.Show("获取模型失败:\r\n" + ex.Message + HintFor(ex.Message), "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
                     var ids = t.Result;
@@ -779,10 +959,47 @@ namespace KimiModelAdder
                     foreach (var id in ids) cboDefault.Items.Add(id);
                     if (ids.Count > 0) cboDefault.SelectedIndex = 0;
                     RenderModels();
-                    lblStatus.Text = "获取到 " + ids.Count + " 个模型";
-                    Log("获取到 " + ids.Count + " 个模型（已全选）。搜索框过滤，选好默认模型后写入。");
+                    lblStatus.Text = "✓ 获取到 " + ids.Count + " 个模型"; lblStatus.ForeColor = OkGreen;
+                    Log("获取到 " + ids.Count + " 个模型（已全选）。搜索框可过滤；选好默认模型后点写入。");
                 }));
             });
+        }
+
+        private void OnTest(object sender, EventArgs e)
+        {
+            var baseUrl = txtBase.Text.Trim();
+            var key = txtKey.Text.Trim();
+            if (baseUrl.Length == 0 || key.Length == 0) { MessageBox.Show("请先填写 Base URL 与 API Key"); return; }
+            btnTest.Enabled = false;
+            lblStatus.Text = "正在测试…"; lblStatus.ForeColor = TextSub;
+            var self = this;
+            Task.Factory.StartNew(delegate { return Api.FetchModels(baseUrl, key); })
+                .ContinueWith(delegate(Task<List<string>> t)
+            {
+                self.BeginInvoke(new Action(delegate
+                {
+                    btnTest.Enabled = true;
+                    if (t.IsFaulted)
+                    {
+                        var ex = t.Exception.Flatten().InnerException;
+                        lblStatus.Text = "✗ 连接失败"; lblStatus.ForeColor = ErrRed;
+                        Log("测试连接失败: " + ex.Message);
+                        MessageBox.Show("连接失败:\r\n" + ex.Message + HintFor(ex.Message), "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    lblStatus.Text = "✓ 连接正常，" + t.Result.Count + " 个模型"; lblStatus.ForeColor = OkGreen;
+                    Log("测试连接成功，" + t.Result.Count + " 个模型。");
+                }));
+            });
+        }
+
+        private string HintFor(string msg)
+        {
+            if (msg.IndexOf("401") >= 0) return "\r\n\r\n提示：401 = API Key 无效，请到服务商后台重新生成。";
+            if (msg.IndexOf("403") >= 0) return "\r\n\r\n提示：403 = 权限或余额问题，请登录服务商面板确认。";
+            if (msg.IndexOf("400") >= 0) return "\r\n\r\n提示：400 = 请求参数问题，常见为模型名或额度限制。";
+            if (msg.IndexOf("name") >= 0 && msg.IndexOf("resolve") >= 0) return "\r\n\r\n提示：域名解析失败，请检查 Base URL 拼写与网络。";
+            return "";
         }
 
         private void OnApply(object sender, EventArgs e)
@@ -821,7 +1038,8 @@ namespace KimiModelAdder
                 TomlConfig.Save(blocks, cfgPath);
                 Log("已写入(全局，对所有目录生效): " + cfgPath);
                 Log("供应商: " + id + "  模型数: " + models.Count + "  默认: " + defModel.Alias + " (" + defModel.Id + ")");
-                MessageBox.Show("写入成功!\r\n默认模型: " + defModel.Alias + " (" + defModel.Id + ")\r\n\r\n新开终端运行 kimi 即可使用。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Log("新开终端运行 kimi 即可使用；会话内 /model 可切换模型。");
+                MessageBox.Show("写入成功！\r\n\r\n默认模型: " + defModel.Alias + " (" + defModel.Id + ")\r\n\r\n新开一个终端，cd 到项目目录，输入 kimi 即可开始使用。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -833,7 +1051,6 @@ namespace KimiModelAdder
 
     internal static class Program
     {
-        public static TextBox TxtLogRef; // 供 Log 使用（GUI 内通过实例方法）
         private static string DefaultConfigPath()
         {
             var home = Environment.GetEnvironmentVariable("KIMI_CODE_HOME");
@@ -903,7 +1120,6 @@ namespace KimiModelAdder
                 var dm = TomlConfig.GetValue(root, "default_model");
                 if (prov == null || aliasCount != 2 || dm != "zz-c-d") { Console.WriteLine("SELFTEST FAIL (provider/alias/default)"); return 1; }
 
-                // 段写入/删除 + 字符串数组
                 TomlConfig.UpsertSection(again, "thinking", new List<Kv> { new Kv("enabled", "true"), new Kv("effort", TomlConfig.Q("high")) });
                 TomlConfig.UpsertSection(again, "permission", new List<Kv> { new Kv("mode", TomlConfig.Q("yolo")) });
                 TomlConfig.Save(again, tmp);
@@ -916,7 +1132,6 @@ namespace KimiModelAdder
                 var arr = TomlConfig.ParseStringArray(TomlConfig.JoinStringArray(new List<string> { "model", "context", "a\"b" }));
                 if (arr.Count != 3 || arr[2] != "a\"b") { Console.WriteLine("SELFTEST FAIL (array)"); return 1; }
 
-                // 幂等
                 var dupCount = TomlConfig.Parse(tmp).Count(b => b.Name == "providers.zzselftest");
                 if (dupCount != 1) { Console.WriteLine("SELFTEST FAIL (idempotent)"); return 1; }
                 File.Delete(tmp);
