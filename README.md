@@ -69,14 +69,17 @@ npmmirror（npm / Node / Git for Windows 二进制镜像）→ npmjs / nodejs.or
 - **如何升级**：下载新版安装包重跑 `安装.cmd`。若用 `npm i -g @moonshot-ai/kimi-code@latest` 升级会得到**英文原版**。
 - **想恢复英文原版**：`卸载.cmd` 后运行官方安装器 `irm https://code.kimi.com/kimi-code/install.ps1 | iex`。
 
-## 配套工具：模型供应商添加器（GUI）
+## 配套工具：配置管理器（GUI）
 
-[`tools/KimiModelAdder.exe`](tools/KimiModelAdder.exe)（源码 [`tools/KimiModelAdder.cs`](tools/KimiModelAdder.cs)，用系统自带 csc 即可编译）：双击运行——
+[`tools/KimiModelAdder.exe`](tools/KimiModelAdder.exe)（源码 [`tools/KimiModelAdder.cs`](tools/KimiModelAdder.cs)，系统自带 csc 编译），五个标签页覆盖 CLI 全部可配置项：
 
-1. 填写供应商 ID、Base URL、API Key
-2. 点 **获取模型列表**（自动请求 `GET {base}/models`）
-3. 勾选要添加的模型、选好默认模型、上下文/输出上限
-4. 点 **写入 config.toml**：自动生成 `[models.*]` 别名（camelCase）与 `[providers.*]` 配置，幂等合并，不破坏已有配置
+1. **供应商与模型**——填 Base URL + API Key → 获取模型列表（支持关键词搜索、全选/全不选）→ 勾选、设默认模型与上下文/输出上限 → 写入全局 `config.toml`（自动生成 `[models.*]` 别名，幂等合并，可删除已有供应商）
+2. **思考与子模型**——`[thinking]`（enabled/effort/keep）、子智能体次级模型 `[secondary_model]`
+3. **权限模式**——`[permission]` mode：总是询问(manual) / 按需询问(yolo) / 从不询问(auto)
+4. **界面 tui.toml**——主题、TUI 布局（常规/全屏）、mermaid 渲染、LaTeX、外部编辑器、桌面通知、缓存过期提醒、评分问卷、自动更新、底栏状态栏槽位
+5. **高级**——实验性 flags、任意 TOML 段直接编辑/删除（hooks 等）
+
+> 写入的是**全局配置**（`KIMI_CODE_HOME` 或 `%USERPROFILE%\.kimi-code\`），对所有工作目录生效。命令行模式：`--apply/--fetchtest/--selftest`。
 
 ## 卸载
 
