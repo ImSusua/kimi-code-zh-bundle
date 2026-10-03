@@ -120,13 +120,14 @@ namespace KimiModelAdder
         }
 
         // 托管写入：重写 providers.<id> 相关块与该 provider 的 models.<别名> 块，并设置根 default_*
+        // 注意：根 default_model 必须是 [models.<别名>] 的别名键，不能是原始模型 ID（否则运行时 lookup 失败）
         public static void MergeProvider(List<TomlBlock> blocks, string id, string baseUrl, string apiKey,
-            List<ModelInfo> models, int maxContext, int maxOutput, string defaultModelId)
+            List<ModelInfo> models, int maxContext, int maxOutput, string defaultAlias, string defaultModelId)
         {
             var root = Find(blocks, "");
             // 1) 根键：删除旧的 default_provider/default_model，插入新的到最前
             root.Items.RemoveAll(delegate(Kv kv) { return kv.Key == "default_provider" || kv.Key == "default_model"; });
-            root.Items.Insert(0, new Kv("default_model", Q(defaultModelId)));
+            root.Items.Insert(0, new Kv("default_model", Q(defaultAlias)));
             root.Items.Insert(0, new Kv("default_provider", Q(id)));
 
             // 2) 删除该 provider 的所有块，以及属于它的 [models.*] 别名块
@@ -149,6 +150,7 @@ namespace KimiModelAdder
             prov.Items.Add(new Kv("type", Q("openai")));
             prov.Items.Add(new Kv("base_url", Q(baseUrl)));
             if (!string.IsNullOrEmpty(apiKey)) prov.Items.Add(new Kv("api_key", Q(apiKey)));
+            prov.Items.Add(new Kv("default_model", Q(defaultModelId)));
             blocks.Add(prov);
             foreach (var m in models)
             {
@@ -266,6 +268,11 @@ namespace KimiModelAdder
         private NumericUpDown numOutput;
         private TextBox txtLog;
         private Label lblStatus;
+        private TextBox txtSearch;
+        private Button btnAll;
+        private Button btnNone;
+        private List<string> allIds = new List<string>();      // 全部模型 id
+        private HashSet<string> checkedIds = new HashSet<string>(); // 勾选状态（跨过滤保留）
 
         public MainForm()
         {
@@ -291,7 +298,20 @@ namespace KimiModelAdder
             lblStatus = new Label { Text = "", Location = new Point(160, 90), AutoSize = true, ForeColor = Color.DimGray };
 
             var lblModels = new Label { Text = "模型（勾选要添加的）:", Location = new Point(16, 124), AutoSize = true };
-            clbModels = new CheckedListBox { Location = new Point(16, 146), Size = new Size(460, 280), CheckOnClick = true };
+            txtSearch = new TextBox { Location = new Point(16, 144), Width = 300 };
+            btnAll = new Button { Text = "全选", Location = new Point(330, 142), Size = new Size(72, 26) };
+            btnNone = new Button { Text = "全不选", Location = new Point(406, 142), Size = new Size(72, 26) };
+            clbModels = new CheckedListBox { Location = new Point(16, 174), Size = new Size(460, 252), CheckOnClick = true };
+            clbModels.ItemCheck += delegate(object s, ItemCheckEventArgs e)
+            {
+                try
+                {
+                    var id = clbModels.Items[e.Index] as string;
+                    if (id == null) return;
+                    if (e.NewValue == CheckState.Checked) checkedIds.Add(id); else checkedIds.Remove(id);
+                }
+                catch { }
+            };
 
             var lblDefault = new Label { Text = "默认模型:", Location = new Point(496, 150), AutoSize = true };
             cboDefault = new ComboBox { Location = new Point(496, 170), Width = 248, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -300,7 +320,7 @@ namespace KimiModelAdder
             var lblOut = new Label { Text = "最大输出 (0=不限):", Location = new Point(496, 268), AutoSize = true };
             numOutput = new NumericUpDown { Location = new Point(496, 288), Width = 120, Maximum = 2000000, Value = 65536, Increment = 1024 };
 
-            btnApply = new Button { Text = "写入 config.toml", Location = new Point(496, 340), Size = new Size(248, 36) };
+            btnApply = new Button { Text = "写入全局 config.toml", Location = new Point(496, 340), Size = new Size(248, 36) };
             btnOpenCfg = new Button { Text = "打开配置目录", Location = new Point(496, 384), Size = new Size(248, 30) };
 
             txtLog = new TextBox { Location = new Point(16, 436), Size = new Size(728, 180), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
@@ -309,7 +329,8 @@ namespace KimiModelAdder
             Controls.Add(lbl2); Controls.Add(txtBase);
             Controls.Add(lbl3); Controls.Add(txtKey); Controls.Add(chkShow);
             Controls.Add(btnFetch); Controls.Add(lblStatus);
-            Controls.Add(lblModels); Controls.Add(clbModels);
+            Controls.Add(lblModels); Controls.Add(txtSearch); Controls.Add(btnAll); Controls.Add(btnNone);
+            Controls.Add(clbModels);
             Controls.Add(lblDefault); Controls.Add(cboDefault);
             Controls.Add(lblCtx); Controls.Add(numContext);
             Controls.Add(lblOut); Controls.Add(numOutput);
@@ -318,6 +339,9 @@ namespace KimiModelAdder
 
             btnFetch.Click += OnFetch;
             btnApply.Click += OnApply;
+            txtSearch.TextChanged += delegate { RenderModels(); };
+            btnAll.Click += delegate { SetAllVisible(true); };
+            btnNone.Click += delegate { SetAllVisible(false); };
             btnOpenCfg.Click += delegate
             {
                 var dir = ConfigPath();
@@ -335,7 +359,10 @@ namespace KimiModelAdder
 
         private string ConfigPath()
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kimi-code", "config.toml");
+            // 全局配置：优先 KIMI_CODE_HOME 环境变量（kimi 官方约定），否则 %USERPROFILE%\.kimi-code
+            var home = Environment.GetEnvironmentVariable("KIMI_CODE_HOME");
+            if (string.IsNullOrEmpty(home)) home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kimi-code");
+            return Path.Combine(home, "config.toml");
         }
 
         private void Log(string s)
@@ -369,17 +396,41 @@ namespace KimiModelAdder
                         return;
                     }
                     var ids = t.Result;
-                    clbModels.BeginUpdate();
-                    clbModels.Items.Clear();
-                    foreach (var id in ids) clbModels.Items.Add(id, true);
-                    clbModels.EndUpdate();
+                    allIds = ids;
+                    checkedIds = new HashSet<string>(ids);
                     cboDefault.Items.Clear();
                     foreach (var id in ids) cboDefault.Items.Add(id);
                     if (ids.Count > 0) cboDefault.SelectedIndex = 0;
+                    RenderModels();
                     lblStatus.Text = "获取到 " + ids.Count + " 个模型";
-                    Log("获取到 " + ids.Count + " 个模型（已全选）。取消不需要的勾选，选好默认模型后点“写入 config.toml”。");
+                    Log("获取到 " + ids.Count + " 个模型（已全选）。可用搜索框过滤、全选/全不选，选好默认模型后点“写入 config.toml”。");
                 }));
             });
+        }
+
+        private void RenderModels()
+        {
+            var kw = (txtSearch.Text == null ? "" : txtSearch.Text.Trim()).ToLower();
+            clbModels.BeginUpdate();
+            clbModels.Items.Clear();
+            foreach (var id in allIds)
+            {
+                if (kw.Length > 0 && id.ToLower().IndexOf(kw) < 0) continue;
+                clbModels.Items.Add(id, checkedIds.Contains(id));
+            }
+            clbModels.EndUpdate();
+        }
+
+        private void SetAllVisible(bool on)
+        {
+            foreach (var id in clbModels.Items)
+            {
+                var s = id as string;
+                if (s == null) continue;
+                if (on) checkedIds.Add(s); else checkedIds.Remove(s);
+            }
+            RenderModels();
+            Log(on ? "已全选（当前过滤结果）" : "已全部取消勾选（当前过滤结果）");
         }
 
         private void OnApply(object sender, EventArgs e)
@@ -391,7 +442,7 @@ namespace KimiModelAdder
                 return;
             }
             var chosen = new List<string>();
-            foreach (var it in clbModels.CheckedItems) chosen.Add(it.ToString());
+            foreach (var mid in allIds) if (checkedIds.Contains(mid)) chosen.Add(mid);
             if (chosen.Count == 0) { MessageBox.Show("请至少勾选一个模型"); return; }
             var def = cboDefault.SelectedItem as string;
             if (def == null || !chosen.Contains(def))
@@ -421,9 +472,9 @@ namespace KimiModelAdder
                 foreach (var mid in chosen) models.Add(new ModelInfo { Id = mid, Alias = Api.MakeAlias(mid, used) });
                 var defModel = models.First(m => m.Id == def);
 
-                TomlConfig.MergeProvider(blocks, id, baseUrl, apiKey, models, ctx, outp, defModel.Id);
+                TomlConfig.MergeProvider(blocks, id, baseUrl, apiKey, models, ctx, outp, defModel.Alias, defModel.Id);
                 TomlConfig.Save(blocks, path);
-                Log("已写入: " + path);
+                Log("已写入(全局，对所有目录生效): " + path);
                 Log("供应商: " + id + "  模型数: " + models.Count + "  默认: " + defModel.Alias + " (" + defModel.Id + ")");
                 Log("新开终端运行 kimi 即可使用；会话内 /model 可切换模型。");
                 MessageBox.Show("写入成功!\r\n默认模型: " + defModel.Alias + " (" + defModel.Id + ")\r\n\r\n新开终端运行 kimi 即可使用。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -441,6 +492,7 @@ namespace KimiModelAdder
         private static int Main(string[] args)
         {
             try { System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072 | (System.Net.SecurityProtocolType)12288; } catch { } // 启用 TLS 1.2/1.3
+            try { Console.OutputEncoding = Encoding.UTF8; } catch { }
             if (args.Length > 0 && args[0] == "--selftest")
             {
                 return SelfTest(args.Length > 1 ? args[1] : null);
@@ -452,10 +504,35 @@ namespace KimiModelAdder
                 foreach (var i in ids.Take(5)) Console.WriteLine("  " + i);
                 return 0;
             }
+            if (args.Length > 0 && args[0] == "--apply")
+            {
+                // --apply <providerId> <base_url> <api_key> <逗号分隔模型ID列表> [默认模型ID] [全局路径覆盖]
+                var ids = args[4].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToList();
+                var defId = args.Length > 5 && args[5].Length > 0 ? args[5] : ids[0];
+                var path = args.Length > 6 && args[6].Length > 0 ? args[6] : DefaultConfigPath();
+                var used = new List<string>();
+                List<TomlBlock> blocks;
+                if (File.Exists(path)) blocks = TomlConfig.Parse(path);
+                else { Directory.CreateDirectory(Path.GetDirectoryName(path)); blocks = new List<TomlBlock> { new TomlBlock { Name = "" } }; }
+                foreach (var b in blocks) if (b.Name.StartsWith("models.")) used.Add(b.Name.Substring("models.".Length));
+                var models = ids.Select(mid => new ModelInfo { Id = mid, Alias = Api.MakeAlias(mid, used) }).ToList();
+                var defModel = models.First(m => m.Id == defId);
+                TomlConfig.MergeProvider(blocks, args[1], args[2], args[3], models, 200000, 65536, defModel.Alias, defModel.Id);
+                TomlConfig.Save(blocks, path);
+                Console.WriteLine("OK 已写入 " + path + " 默认别名=" + defModel.Alias);
+                return 0;
+            }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
             return 0;
+        }
+
+        private static string DefaultConfigPath()
+        {
+            var home = Environment.GetEnvironmentVariable("KIMI_CODE_HOME");
+            if (string.IsNullOrEmpty(home)) home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kimi-code");
+            return Path.Combine(home, "config.toml");
         }
 
         private static int SelfTest(string configPath)
@@ -463,8 +540,7 @@ namespace KimiModelAdder
             try
             {
                 var real = configPath;
-                if (real == null)
-                    real = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kimi-code", "config.toml");
+                if (real == null) real = DefaultConfigPath();
                 Console.WriteLine("源配置: " + real);
                 var tmp = Path.Combine(Path.GetTempPath(), "kimi-config-selftest.toml");
                 File.Copy(real, tmp, true);
@@ -477,21 +553,22 @@ namespace KimiModelAdder
                     new ModelInfo { Id = "zz/a.b", Alias = "zz-a-b" },
                     new ModelInfo { Id = "zz/c-d", Alias = "zz-c-d" }
                 };
-                TomlConfig.MergeProvider(blocks, "zzselftest", "https://example.invalid/v1", "sk-test", models, 200000, 65536, "zz/c-d");
+                TomlConfig.MergeProvider(blocks, "zzselftest", "https://example.invalid/v1", "sk-test", models, 200000, 65536, "zz-c-d", "zz/c-d");
                 TomlConfig.Save(blocks, tmp);
 
                 var again = TomlConfig.Parse(tmp);
                 var prov = TomlConfig.Find(again, "providers.zzselftest");
                 var root = TomlConfig.Find(again, "");
                 var aliasCount = again.Count(b => b.Name.StartsWith("models.") && TomlConfig.GetValue(b, "provider") == "zzselftest");
+                var dm = TomlConfig.GetValue(root, "default_model");
                 Console.WriteLine("合并后: providers.zzselftest type=" + TomlConfig.GetValue(prov, "type")
                     + " | root default_provider=" + TomlConfig.GetValue(root, "default_provider")
-                    + " | root default_model=" + TomlConfig.GetValue(root, "default_model")
+                    + " | root default_model=" + dm
                     + " | zz 别名数=" + aliasCount);
-                if (prov == null || aliasCount != 2) { Console.WriteLine("SELFTEST FAIL"); return 1; }
+                if (prov == null || aliasCount != 2 || dm != "zz-c-d") { Console.WriteLine("SELFTEST FAIL"); return 1; }
                 // 再跑一次覆盖合并（幂等性检查）
                 var third = TomlConfig.Parse(tmp);
-                TomlConfig.MergeProvider(third, "zzselftest", "https://example.invalid/v1", "sk-test", models, 200000, 65536, "zz/c-d");
+                TomlConfig.MergeProvider(third, "zzselftest", "https://example.invalid/v1", "sk-test", models, 200000, 65536, "zz-c-d", "zz/c-d");
                 TomlConfig.Save(third, tmp);
                 var dupCount = TomlConfig.Parse(tmp).Count(b => b.Name == "providers.zzselftest");
                 Console.WriteLine("重复合并后 providers.zzselftest 块数: " + dupCount + (dupCount == 1 ? " (幂等 OK)" : " (FAIL)"));
