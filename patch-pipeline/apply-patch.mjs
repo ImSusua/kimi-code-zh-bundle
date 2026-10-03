@@ -35,6 +35,7 @@ function absorb(poolFile, batchMap) {
 absorb('pool-tui.tsv', tuiZh);
 absorb('pool-cli.tsv', cliZh);
 absorb('pool-residual.tsv', loadBatch(['zh-batch-3.json']));
+absorb('pool-rest.tsv', loadBatch(['zh-batch-4.json', 'zh-batch-5.json', 'zh-batch-6.json', 'zh-batch-7.json']));
 console.error('raw->zh:', rawToZh.size);
 
 const src = fs.readFileSync(SRC_FILE, 'utf8');
