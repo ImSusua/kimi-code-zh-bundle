@@ -36,7 +36,10 @@ absorb('pool-tui.tsv', tuiZh);
 absorb('pool-cli.tsv', cliZh);
 absorb('pool-residual.tsv', loadBatch(['zh-batch-3.json']));
 absorb('pool-rest.tsv', loadBatch(['zh-batch-4.json', 'zh-batch-5.json', 'zh-batch-6.json', 'zh-batch-7.json']));
-console.error('raw->zh:', rawToZh.size);
+// 模型侧文本回退：这些串保持英文（发给模型的提示/指令，汉化会影响工具调用效果与成本）
+const revert = new Set(JSON.parse(fs.readFileSync('revert-model-facing.json', 'utf8')));
+for (const r of revert) rawToZh.delete(r);
+console.error('raw->zh (after model-facing revert):', rawToZh.size);
 
 const src = fs.readFileSync(SRC_FILE, 'utf8');
 const n = src.length;

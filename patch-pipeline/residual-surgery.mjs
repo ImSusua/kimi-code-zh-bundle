@@ -20,9 +20,7 @@ const REPLACES = [
   ['if (model.trim().length === 0) return "not set";', 'if (model.trim().length === 0) return "未设置";'],
   // 帮助面板 Enter 快捷键
   ['description: "Submit"', 'description: "提交"'],
-  // check-kimi-code-docs 技能描述（frontmatter）
-  ['Answer questions about the Kimi Code product using the official documentation — CLI usage, configuration, slash commands, features, membership and quota, API onboarding, third-party tool setup, and error codes. Use when the user asks how Kimi Code works, how to set something up, or what a Kimi Code error message means.',
-   '使用官方文档解答关于 Kimi Code 产品的问题 —— CLI 用法、配置、斜杠命令、功能、会员与配额、API 接入、第三方工具设置与错误码。当用户询问 Kimi Code 的工作方式、如何配置某项功能，或某条 Kimi Code 错误信息的含义时使用。'],
+
 ];
 
 let total = 0;
