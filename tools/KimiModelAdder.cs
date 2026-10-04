@@ -339,17 +339,33 @@ namespace KimiModelAdder
             Text = "Kimi Code 配置管理器";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(940, 720);
+            ClientSize = new Size(940, 760);
             Font = new Font("Microsoft YaHei UI", 9F);
             BackColor = PageBg;
 
-            // ================= 侧边栏 =================
+            // ================= 内容区（先加入，侧边栏后加，保证 Left 停靠生效） =================
+            var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, Padding = new Padding(12, 12, 12, 6) };
+
+            // 页面（先加入，日志最后加入：最后加入的先完成停靠，日志占据底部，页面填充其余）
+            for (int i = 0; i < 6; i++)
+            {
+                var p = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = PageBg, Visible = false };
+                pages.Add(p);
+                contentHost.Controls.Add(p);
+            }
+            var logHost = new Panel { Dock = DockStyle.Bottom, Size = new Size(760, 92), BackColor = PageBg, Padding = new Padding(0, 4, 0, 0) };
+            txtLog = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft YaHei UI", 8.5F) };
+            logHost.Controls.Add(txtLog);
+            contentHost.Controls.Add(logHost);
+            Controls.Add(contentHost);
+
+            // ================= 侧边栏（最后加入 + BringToFront） =================
             var sidebar = new Panel { Dock = DockStyle.Left, Width = 208, BackColor = Color.White };
-            var brand1 = new Label { Text = "Kimi Code", Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 20), AutoSize = true };
-            var brand2 = new Label { Text = "配置管理器 · 全中文", Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = TextSub, Location = new Point(20, 50), AutoSize = true };
+            var brand1 = new Label { Text = "Kimi Code", Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 18), AutoSize = true };
+            var brand2 = new Label { Text = "配置管理器 · 全中文", Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = TextSub, Location = new Point(20, 48), AutoSize = true };
             sidebar.Controls.Add(brand1);
             sidebar.Controls.Add(brand2);
-            var navTitles = new[] { "📡  供应商与模型", "🧠  思考与子模型", "🔒  权限模式", "🎨  界面偏好", "🧩  高级", "❓  使用帮助" };
+            var navTitles = new[] { "  供应商与模型", "  思考与子模型", "  权限模式", "  界面偏好", "  高级", "  使用帮助" };
             for (int i = 0; i < navTitles.Length; i++)
             {
                 var idx = i;
@@ -357,10 +373,10 @@ namespace KimiModelAdder
                 {
                     Text = navTitles[i],
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Padding = new Padding(18, 0, 0, 0),
+                    Padding = new Padding(16, 0, 0, 0),
                     FlatStyle = FlatStyle.Flat,
                     Size = new Size(208, 46),
-                    Location = new Point(0, 84 + i * 48),
+                    Location = new Point(0, 80 + i * 48),
                     BackColor = Color.White,
                     ForeColor = TextMain,
                     Font = new Font("Microsoft YaHei UI", 9.5F),
@@ -372,53 +388,37 @@ namespace KimiModelAdder
                 navButtons.Add(b);
                 sidebar.Controls.Add(b);
             }
-            var lblSide = new Label { Text = "配置对所有目录生效", Font = new Font("Microsoft YaHei UI", 8F), ForeColor = TextSub, Location = new Point(20, 660), AutoSize = true };
+            var lblSide = new Label { Text = "配置对所有目录生效", Font = new Font("Microsoft YaHei UI", 8F), ForeColor = TextSub, Location = new Point(20, 690), AutoSize = true };
             sidebar.Controls.Add(lblSide);
             Controls.Add(sidebar);
-
-            // ================= 内容区 =================
-            var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, Padding = new Padding(12, 12, 12, 8) };
-
-            // 日志（底部）
-            txtLog = new TextBox { Dock = DockStyle.Bottom, Size = new Size(860, 96), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft YaHei UI", 8.5F) };
-            contentHost.Controls.Add(txtLog);
-
-            for (int i = 0; i < 6; i++)
-            {
-                var p = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = PageBg, Visible = false };
-                pages.Add(p);
-                contentHost.Controls.Add(p);
-            }
-            Controls.Add(contentHost);
+            contentHost.BringToFront();
 
             // ================= 页 1：供应商与模型 =================
             var p1 = pages[0];
             PageHeader(p1, "供应商与模型", "三步接入你的中转/供应商：填写信息 → 获取模型 → 勾选写入");
-            int y1 = 84;
-            Card(p1, 14, y1, 700, 150, "① 填写供应商信息", "这些信息由你的模型服务商（中转站）提供");
-            txtProvider = new TextBox { Location = new Point(150, 34), Width = 140, Text = "susu" };
-            txtBase = new TextBox { Location = new Point(150, 70), Width = 430 };
-            txtKey = new TextBox { Location = new Point(150, 106), Width = 430, UseSystemPasswordChar = true };
-            chkShow = new CheckBox { Text = "显示", Location = new Point(590, 104), AutoSize = true, ForeColor = TextSub };
+            var c1 = Card(p1, 16, 80, 676, 146, "① 填写供应商信息", "这些信息由你的模型服务商（中转站）提供");
+            txtProvider = new TextBox { Location = new Point(120, 54), Width = 140, Text = "susu" };
+            txtBase = new TextBox { Location = new Point(120, 86), Width = 430 };
+            txtKey = new TextBox { Location = new Point(120, 118), Width = 430, UseSystemPasswordChar = true };
+            chkShow = new CheckBox { Text = "显示", Location = new Point(560, 116), AutoSize = true, ForeColor = TextSub };
             chkShow.CheckedChanged += delegate { txtKey.UseSystemPasswordChar = !chkShow.Checked; };
-            FieldLabel(p1, "供应商 ID", 14, 36, "仅字母数字-和_，重复写入会覆盖同 ID");
-            FieldLabel(p1, "Base URL", 14, 72, "一般以 /v1 结尾，例如 https://api.example.com/v1");
-            FieldLabel(p1, "API Key", 14, 108, "服务商提供的密钥，只保存在本机配置里");
-            p1.Controls.AddRange(new Control[] { txtProvider, txtBase, txtKey, chkShow });
-            y1 += 162;
+            CardLabel(c1, "供应商 ID", 18, 58);
+            CardLabel(c1, "Base URL", 18, 90);
+            CardLabel(c1, "API Key", 18, 122);
+            c1.Controls.AddRange(new Control[] { txtProvider, txtBase, txtKey, chkShow });
 
-            Card(p1, 14, y1, 700, 268, "② 获取并勾选模型", "点击按钮拉取 /v1/models 列表；可用搜索框过滤，支持全选/全不选");
-            btnFetch = new Button { Text = "获取模型列表", Location = new Point(20, 34), Size = new Size(140, 34) };
+            var c2 = Card(p1, 16, 234, 676, 246, "② 获取并勾选模型", "点击按钮拉取 /v1/models 列表；可用搜索框过滤，支持全选/全不选");
+            btnFetch = new Button { Text = "获取模型列表", Location = new Point(18, 54), Size = new Size(130, 30) };
             StylePrimary(btnFetch);
-            btnTest = new Button { Text = "测试连接", Location = new Point(170, 34), Size = new Size(100, 34) };
+            btnTest = new Button { Text = "测试连接", Location = new Point(156, 54), Size = new Size(96, 30) };
             StyleGhost(btnTest);
-            lblStatus = new Label { Text = "", Location = new Point(284, 42), AutoSize = true, ForeColor = TextSub };
-            var lblModels = new Label { Text = "🔍 搜索:", Location = new Point(20, 84), AutoSize = true, ForeColor = TextSub };
-            txtSearch = new TextBox { Location = new Point(88, 80), Width = 260 };
-            btnAll = new Button { Text = "全选", Location = new Point(356, 79), Size = new Size(64, 25) };
-            btnNone = new Button { Text = "全不选", Location = new Point(424, 79), Size = new Size(72, 25) };
+            lblStatus = new Label { Text = "", Location = new Point(262, 62), AutoSize = true, ForeColor = TextSub };
+            var lblModels = new Label { Text = "搜索:", Location = new Point(18, 96), AutoSize = true, ForeColor = TextSub };
+            txtSearch = new TextBox { Location = new Point(86, 92), Width = 230 };
+            btnAll = new Button { Text = "全选", Location = new Point(324, 91), Size = new Size(64, 25) };
+            btnNone = new Button { Text = "全不选", Location = new Point(392, 91), Size = new Size(72, 25) };
             StyleGhost(btnAll); StyleGhost(btnNone);
-            clbModels = new CheckedListBox { Location = new Point(20, 112), Size = new Size(476, 140), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
+            clbModels = new CheckedListBox { Location = new Point(18, 120), Size = new Size(440, 108), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
             clbModels.ItemCheck += delegate(object s, ItemCheckEventArgs e)
             {
                 try
@@ -429,95 +429,90 @@ namespace KimiModelAdder
                 }
                 catch { }
             };
-            var lblDefault = new Label { Text = "默认模型", Location = new Point(516, 116), AutoSize = true, ForeColor = TextMain };
-            cboDefault = new ComboBox { Location = new Point(516, 136), Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-            var lblCtx = new Label { Text = "上下文长度", Location = new Point(516, 172), AutoSize = true, ForeColor = TextMain };
-            numContext = new NumericUpDown { Location = new Point(516, 192), Width = 130, Maximum = 2000000, Value = 200000, Increment = 1000 };
-            var lblOut = new Label { Text = "最大输出 (0=不限)", Location = new Point(516, 230), AutoSize = true, ForeColor = TextMain };
-            numOutput = new NumericUpDown { Location = new Point(516, 250), Width = 130, Maximum = 2000000, Value = 65536, Increment = 1024 };
-            p1.Controls.AddRange(new Control[] { btnFetch, btnTest, lblStatus, lblModels, txtSearch, btnAll, btnNone, clbModels, lblDefault, cboDefault, lblCtx, numContext, lblOut, numOutput });
-            y1 += 280;
+            var lblDefault = new Label { Text = "默认模型", Location = new Point(474, 90), AutoSize = true, ForeColor = TextMain };
+            cboDefault = new ComboBox { Location = new Point(474, 110), Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
+            var lblCtx = new Label { Text = "上下文长度", Location = new Point(474, 144), AutoSize = true, ForeColor = TextMain };
+            numContext = new NumericUpDown { Location = new Point(474, 164), Width = 130, Maximum = 2000000, Value = 200000, Increment = 1000 };
+            var lblOut = new Label { Text = "最大输出 (0=不限)", Location = new Point(474, 196), AutoSize = true, ForeColor = TextMain };
+            numOutput = new NumericUpDown { Location = new Point(474, 216), Width = 130, Maximum = 2000000, Value = 65536, Increment = 1024 };
+            c2.Controls.AddRange(new Control[] { btnFetch, btnTest, lblStatus, lblModels, txtSearch, btnAll, btnNone, clbModels, lblDefault, cboDefault, lblCtx, numContext, lblOut, numOutput });
 
-            Card(p1, 14, y1, 700, 128, "③ 确认并写入全局配置", "写入后所有工作目录都能用；重复写入同一供应商 ID 会整体更新");
-            btnApply = new Button { Text = "写入全局配置（✔ 全部目录生效）", Location = new Point(20, 34), Size = new Size(300, 40) };
+            var c3 = Card(p1, 16, 488, 676, 124, "③ 确认并写入全局配置", "写入后所有工作目录都能用；重复写入同一供应商 ID 会整体更新");
+            btnApply = new Button { Text = "写入全局配置（✔ 全部目录生效）", Location = new Point(18, 52), Size = new Size(270, 36) };
             StylePrimary(btnApply);
-            btnReload = new Button { Text = "重新读取配置", Location = new Point(334, 38), Size = new Size(130, 32) };
-            btnOpenCfg = new Button { Text = "打开配置目录", Location = new Point(470, 38), Size = new Size(130, 32) };
+            btnReload = new Button { Text = "重新读取配置", Location = new Point(300, 58), Size = new Size(130, 30) };
+            btnOpenCfg = new Button { Text = "打开配置目录", Location = new Point(436, 58), Size = new Size(130, 30) };
             StyleGhost(btnReload); StyleGhost(btnOpenCfg);
-            var lblProvList = new Label { Text = "已配置的供应商:", Location = new Point(20, 84), AutoSize = true, ForeColor = TextMain };
-            lstProviders = new ListBox { Location = new Point(150, 80), Size = new Size(230, 40), BorderStyle = BorderStyle.FixedSingle };
-            btnDelProvider = new Button { Text = "删除选中的供应商", Location = new Point(390, 82), Size = new Size(150, 30) };
+            var lblProvList = new Label { Text = "已配置供应商:", Location = new Point(18, 102), AutoSize = true, ForeColor = TextMain };
+            lstProviders = new ListBox { Location = new Point(130, 96), Size = new Size(230, 26), BorderStyle = BorderStyle.FixedSingle };
+            btnDelProvider = new Button { Text = "删除选中的供应商", Location = new Point(370, 98), Size = new Size(150, 26) };
             StyleGhost(btnDelProvider);
-            p1.Controls.AddRange(new Control[] { btnApply, btnReload, btnOpenCfg, lblProvList, lstProviders, btnDelProvider });
-            var lblG = new Label { Text = "配置文件位置见底部日志；删除供应商会同时移除它的全部模型别名。", Location = new Point(16, y1 + 138), AutoSize = true, ForeColor = TextSub };
+            c3.Controls.AddRange(new Control[] { btnApply, btnReload, btnOpenCfg, lblProvList, lstProviders, btnDelProvider });
+            var lblG = new Label { Text = "配置文件位置见底部日志；删除供应商会同时移除它的全部模型别名。", Location = new Point(18, 618), AutoSize = true, ForeColor = TextSub };
             p1.Controls.Add(lblG);
 
             // ================= 页 2：思考与子模型 =================
             var p2 = pages[1];
             PageHeader(p2, "思考与子模型", "控制模型的思考强度，以及子智能体使用哪个模型");
-            y1 = 84;
-            Card(p2, 14, y1, 700, 168, "思考模式 [thinking]", "让模型在回答前进行更深入的推理");
-            chkThinking = new CheckBox { Text = "启用思考", Location = new Point(20, 38), AutoSize = true };
-            var lblEffort = new Label { Text = "思考强度 effort:", Location = new Point(20, 74), AutoSize = true, ForeColor = TextMain };
-            cboEffort = new ComboBox { Location = new Point(150, 70), Width = 140, DropDownStyle = ComboBoxStyle.DropDown };
+            var c4 = Card(p2, 16, 80, 676, 162, "思考模式 [thinking]", "让模型在回答前进行更深入的推理");
+            chkThinking = new CheckBox { Text = "启用思考", Location = new Point(20, 54), AutoSize = true };
+            var lblEffort = new Label { Text = "思考强度 effort:", Location = new Point(20, 88), AutoSize = true, ForeColor = TextMain };
+            cboEffort = new ComboBox { Location = new Point(150, 84), Width = 140, DropDownStyle = ComboBoxStyle.DropDown };
             cboEffort.Items.AddRange(new object[] { "off", "low", "medium", "high" });
-            var lblEffortN = new Label { Text = "常用 off / low / medium / high，留空 = 不设置", Location = new Point(300, 74), AutoSize = true, ForeColor = TextSub };
-            var lblKeep = new Label { Text = "keep 预算:", Location = new Point(20, 110), AutoSize = true, ForeColor = TextMain };
-            txtKeep = new TextBox { Location = new Point(150, 106), Width = 140 };
-            var lblKeepN = new Label { Text = "压缩上下文时保留的思考 token 预算，如 20000；留空 = 不设置", Location = new Point(300, 110), AutoSize = true, ForeColor = TextSub };
-            p2.Controls.AddRange(new Control[] { chkThinking, lblEffort, cboEffort, lblEffortN, lblKeep, txtKeep, lblKeepN });
-            y1 += 182;
-            Card(p2, 14, y1, 700, 128, "子智能体次级模型 [secondary_model]", "后台子智能体（coder / explore 等）使用的模型");
-            txtSecModel = new TextBox { Location = new Point(20, 36), Width = 300 };
-            var lblSec2 = new Label { Text = "填 [models.*] 别名（如 agnes-2-5-flash）；留空 = 跟随主模型", Location = new Point(20, 66), AutoSize = true, ForeColor = TextSub };
-            chkSecForce = new CheckBox { Text = "force：强制所有子智能体使用，忽略会话级覆盖", Location = new Point(20, 90), AutoSize = true };
-            p2.Controls.AddRange(new Control[] { txtSecModel, lblSec2, chkSecForce });
-            var btnSaveThink = new Button { Text = "写入以上设置", Location = new Point(14, y1 + 142), Size = new Size(180, 36) };
+            var lblEffortN = new Label { Text = "常用 off / low / medium / high，留空 = 不设置", Location = new Point(300, 88), AutoSize = true, ForeColor = TextSub };
+            var lblKeep = new Label { Text = "keep 预算:", Location = new Point(20, 122), AutoSize = true, ForeColor = TextMain };
+            txtKeep = new TextBox { Location = new Point(150, 118), Width = 140 };
+            var lblKeepN = new Label { Text = "压缩上下文时保留的思考 token 预算，如 20000", Location = new Point(300, 122), AutoSize = true, ForeColor = TextSub };
+            c4.Controls.AddRange(new Control[] { chkThinking, lblEffort, cboEffort, lblEffortN, lblKeep, txtKeep, lblKeepN });
+            var c5 = Card(p2, 16, 252, 676, 142, "子智能体次级模型 [secondary_model]", "后台子智能体（coder / explore 等）使用的模型");
+            txtSecModel = new TextBox { Location = new Point(20, 52), Width = 300 };
+            var lblSec2 = new Label { Text = "填 [models.*] 别名（如 agnes-2-5-flash）；留空 = 跟随主模型", Location = new Point(20, 84), AutoSize = true, ForeColor = TextSub };
+            chkSecForce = new CheckBox { Text = "force：强制所有子智能体使用，忽略会话级覆盖", Location = new Point(20, 108), AutoSize = true };
+            c5.Controls.AddRange(new Control[] { txtSecModel, lblSec2, chkSecForce });
+            var btnSaveThink = new Button { Text = "写入以上设置", Location = new Point(16, 406), Size = new Size(180, 36) };
             StylePrimary(btnSaveThink);
-            var lbl23 = new Label { Text = "留空的键不会写入；修改后新会话生效（当前会话用 /reload）。", Location = new Point(210, y1 + 150), AutoSize = true, ForeColor = TextSub };
+            var lbl23 = new Label { Text = "留空的键不会写入；修改后新会话生效（当前会话用 /reload）。", Location = new Point(210, 414), AutoSize = true, ForeColor = TextSub };
             p2.Controls.AddRange(new Control[] { btnSaveThink, lbl23 });
 
             // ================= 页 3：权限模式 =================
             var p3 = pages[2];
             PageHeader(p3, "权限模式", "控制 kimi 执行命令 / 修改文件前要不要先征求你的同意");
-            rbManual = new RadioButton { Text = "总是询问（manual）—— 最安全", Location = new Point(24, 24), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
-            var rbManualN = new Label { Text = "每条命令、每次改文件都会先问你；适合初次使用或重要项目", Location = new Point(46, 48), AutoSize = true, ForeColor = TextSub };
-            rbYolo = new RadioButton { Text = "按需询问（yolo）—— 推荐", Location = new Point(24, 84), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
-            var rbYoloN = new Label { Text = "常规编辑与命令自动执行，高风险操作仍会询问", Location = new Point(46, 108), AutoSize = true, ForeColor = TextSub };
-            rbAuto = new RadioButton { Text = "从不询问（auto）—— 无人值守", Location = new Point(24, 144), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
-            var rbAutoN = new Label { Text = "一切自动运行，不再打断你；适合挂机跑长任务", Location = new Point(46, 168), AutoSize = true, ForeColor = TextSub };
-            var pc = new Panel { Location = new Point(14, 84), Size = new Size(700, 200), BackColor = Color.White };
+            var pc = Card(p3, 16, 80, 676, 210, "permission.mode", null);
+            rbManual = new RadioButton { Text = "总是询问（manual）—— 最安全", Location = new Point(20, 32), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbManualN = new Label { Text = "每条命令、每次改文件都会先问你；适合初次使用或重要项目", Location = new Point(42, 56), AutoSize = true, ForeColor = TextSub };
+            rbYolo = new RadioButton { Text = "按需询问（yolo）—— 推荐", Location = new Point(20, 88), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbYoloN = new Label { Text = "常规编辑与命令自动执行，高风险操作仍会询问", Location = new Point(42, 112), AutoSize = true, ForeColor = TextSub };
+            rbAuto = new RadioButton { Text = "从不询问（auto）—— 无人值守", Location = new Point(20, 144), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
+            var rbAutoN = new Label { Text = "一切自动运行，不再打断你；适合挂机跑长任务", Location = new Point(42, 168), AutoSize = true, ForeColor = TextSub };
             pc.Controls.AddRange(new Control[] { rbManual, rbManualN, rbYolo, rbYoloN, rbAuto, rbAutoN });
-            p3.Controls.Add(pc);
-            var btnSavePerm = new Button { Text = "写入权限模式", Location = new Point(14, 300), Size = new Size(180, 36) };
+            var btnSavePerm = new Button { Text = "写入权限模式", Location = new Point(16, 302), Size = new Size(180, 36) };
             StylePrimary(btnSavePerm);
-            var lblPn = new Label { Text = "写入 [permission] mode；删除该段则恢复默认（manual）。新会话生效。", Location = new Point(210, 308), AutoSize = true, ForeColor = TextSub };
+            var lblPn = new Label { Text = "写入 [permission] mode；删除该段则恢复默认（manual）。新会话生效。", Location = new Point(210, 310), AutoSize = true, ForeColor = TextSub };
             p3.Controls.AddRange(new Control[] { btnSavePerm, lblPn });
 
             // ================= 页 4：界面偏好 =================
             var p4 = pages[3];
             PageHeader(p4, "界面偏好 (tui.toml)", "调整 kimi 终端界面的外观与行为，重启 kimi 后生效");
-            y1 = 84;
-            Card(p4, 14, y1, 700, 420, "外观与行为", "全部写入 " + tuiPath);
-            int y4 = 34;
+            var c6 = Card(p4, 16, 80, 676, 474, "外观与行为", "写入 tui.toml（完整路径见帮助页与日志）");
+            int y4 = 56;
             Action<string, Control, string> row = delegate(string name, Control a, string desc)
             {
                 var l = new Label { Text = name, Location = new Point(20, y4 + 4), AutoSize = true, ForeColor = TextMain };
-                a.Location = new Point(200, y4);
-                p4.Controls.Add(l); p4.Controls.Add(a);
+                a.Location = new Point(180, y4);
+                c6.Controls.Add(l); c6.Controls.Add(a);
                 if (desc != null && desc.Length > 0)
                 {
-                    var d = new Label { Text = desc, Location = new Point(360, y4 + 4), AutoSize = true, ForeColor = TextSub };
-                    p4.Controls.Add(d);
+                    var d = new Label { Text = desc, Location = new Point(370, y4 + 4), AutoSize = true, ForeColor = TextSub };
+                    c6.Controls.Add(d);
                 }
-                y4 += 38;
+                y4 += 34;
             };
             cboTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 140 };
             cboTheme.Items.AddRange(new object[] { "auto", "dark", "light" });
             row("主题 theme:", cboTheme, "auto 跟随终端 / dark / light");
             cboTuiMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
             cboTuiMode.Items.AddRange(new object[] { "regular", "fullscreen" });
-            row("布局 tui_mode:", cboTuiMode, "fullscreen 为实验性的全屏模式");
+            row("布局 tui_mode:", cboTuiMode, "fullscreen 为实验性全屏模式");
             cboMermaid = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
             cboMermaid.Items.AddRange(new object[] { "final", "off" });
             row("Mermaid 图表:", cboMermaid, "final=渲染成图，off=保留源码");
@@ -529,37 +524,39 @@ namespace KimiModelAdder
             row("缓存提醒:", chkCacheHint, "关闭后不再弹出续费提示");
             chkSurvey = new CheckBox { Text = "隐藏会话评分问卷", AutoSize = true, ForeColor = TextMain };
             row("评分问卷:", chkSurvey, null);
-            txtEditor = new TextBox { Width = 220 };
+            txtEditor = new TextBox { Width = 200 };
             row("外部编辑器:", txtEditor, "留空用 $VISUAL/$EDITOR，Ctrl-G 调用");
             chkNotif = new CheckBox { Text = "桌面通知", AutoSize = true, ForeColor = TextMain };
-            cboNotifCond = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
+            row("通知:", chkNotif, null);
+            cboNotifCond = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
             cboNotifCond.Items.AddRange(new object[] { "unfocused", "always" });
-            row("通知:", chkNotif, null); cboNotifCond.Location = new Point(380, y4 - 38); p4.Controls.Add(cboNotifCond);
+            cboNotifCond.Location = new Point(chkNotif.Right + 8, y4 - 34);
+            c6.Controls.Add(cboNotifCond);
             chkAutoUpgrade = new CheckBox { Text = "后台自动安装更新", AutoSize = true, ForeColor = TextMain };
             row("自动更新:", chkAutoUpgrade, null);
             var lblSt = new Label { Text = "底栏槽位:", Location = new Point(20, y4 + 4), AutoSize = true, ForeColor = TextMain };
-            txtStatusItems = new TextBox { Location = new Point(200, y4), Width = 460 };
-            p4.Controls.Add(lblSt); p4.Controls.Add(txtStatusItems);
-            y4 += 42;
-            btnSaveTui = new Button { Text = "写入 tui.toml", Location = new Point(20, y4), Size = new Size(180, 36) };
+            txtStatusItems = new TextBox { Location = new Point(180, y4), Width = 440 };
+            c6.Controls.Add(lblSt); c6.Controls.Add(txtStatusItems);
+            y4 += 40;
+            btnSaveTui = new Button { Text = "写入 tui.toml", Location = new Point(20, y4), Size = new Size(180, 34) };
             StylePrimary(btnSaveTui);
-            p4.Controls.Add(btnSaveTui);
+            c6.Controls.Add(btnSaveTui);
 
             // ================= 页 5：高级 =================
             var p5 = pages[4];
             PageHeader(p5, "高级", "实验性功能与任意配置段的直接编辑，普通用户可以不用");
-            Card(p5, 14, 84, 700, 150, "实验性 flags [experimental]", "一行一个，来自官方公告或 /settings");
-            txtFlags = new TextBox { Location = new Point(20, 34), Size = new Size(660, 80), Multiline = true, ScrollBars = ScrollBars.Vertical };
-            p5.Controls.Add(txtFlags);
-            Card(p5, 14, 250, 700, 250, "直接编辑任意 TOML 段", "段名 + 每行 key = value（如 hooks、workspace 等高级段）");
-            txtRawSection = new TextBox { Location = new Point(20, 32), Width = 280 };
-            var btnDelSec = new Button { Text = "删除该段", Location = new Point(320, 30), Size = new Size(110, 26) };
+            var c7 = Card(p5, 16, 80, 676, 142, "实验性 flags [experimental]", "一行一个，来自官方公告或 /settings");
+            txtFlags = new TextBox { Location = new Point(20, 32), Size = new Size(636, 80), Multiline = true, ScrollBars = ScrollBars.Vertical };
+            c7.Controls.Add(txtFlags);
+            var c8 = Card(p5, 16, 232, 676, 264, "直接编辑任意 TOML 段", "段名 + 每行 key = value（如 hooks、workspace 等高级段）");
+            txtRawSection = new TextBox { Location = new Point(20, 54), Width = 280 };
+            var btnDelSec = new Button { Text = "删除该段", Location = new Point(316, 52), Size = new Size(110, 26) };
             StyleGhost(btnDelSec);
-            txtRawBody = new TextBox { Location = new Point(20, 64), Size = new Size(660, 130), Multiline = true, ScrollBars = ScrollBars.Vertical };
-            btnSaveRaw = new Button { Text = "写入该段", Location = new Point(20, 200), Size = new Size(140, 32) };
+            txtRawBody = new TextBox { Location = new Point(20, 86), Size = new Size(636, 120), Multiline = true, ScrollBars = ScrollBars.Vertical };
+            btnSaveRaw = new Button { Text = "写入该段", Location = new Point(20, 216), Size = new Size(140, 30) };
             StylePrimary(btnSaveRaw);
-            p5.Controls.AddRange(new Control[] { txtRawSection, btnDelSec, txtRawBody, btnSaveRaw });
-            var lblT5 = new Label { Text = "写入前请确认段名正确；表数组 [[段名]] 不在此支持范围。", Location = new Point(20, 510), AutoSize = true, ForeColor = TextSub };
+            c8.Controls.AddRange(new Control[] { txtRawSection, btnDelSec, txtRawBody, btnSaveRaw });
+            var lblT5 = new Label { Text = "写入前请确认段名正确；表数组 [[段名]] 不在此支持范围。", Location = new Point(18, 508), AutoSize = true, ForeColor = TextSub };
             p5.Controls.Add(lblT5);
 
             // ================= 页 6：帮助 =================
@@ -567,7 +564,7 @@ namespace KimiModelAdder
             PageHeader(p6, "使用帮助", "常见问题与排错对照");
             var help = new TextBox
             {
-                Location = new Point(14, 84), Size = new Size(700, 480),
+                Location = new Point(16, 80), Size = new Size(676, 470),
                 Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
                 BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle,
                 Font = new Font("Microsoft YaHei UI", 9F)
@@ -583,7 +580,7 @@ namespace KimiModelAdder
                 + "  Model \"...\" is not configured in config.toml\r\n"
                 + "      → config.toml 里 default_model 指向的别名不存在；用本工具重新写入即可\r\n"
                 + "  401 Invalid token\r\n"
-                + "      → API Key 失效，去服务商后台重新生成，回到本工具第①步重新写入\r\n"
+                + "      → API Key 失效，去服务商后台重新生成，回到第①步重新写入\r\n"
                 + "  403 预扣费失败 / 余额不足\r\n"
                 + "      → 中转账户余额不够，充值即可，配置无需改动\r\n"
                 + "  400 max_tokens 不能超过 65536\r\n"
@@ -727,9 +724,12 @@ namespace KimiModelAdder
             };
 
             ShowPage(0);
+            LoadConfigToUi();
             Log("全局配置: " + cfgPath);
-            Log(File.Exists(cfgPath) ? "已读取当前配置。" : "首次使用：按 ① 填写 → ② 获取模型 → ③ 写入 三步即可完成配置。");
+
         }
+
+        internal void NavForTest(int idx) { ShowPage(idx); }
 
         private void ShowPage(int idx)
         {
@@ -749,7 +749,7 @@ namespace KimiModelAdder
             p.Controls.Add(s);
         }
 
-        private void Card(Panel page, int x, int y, int w, int h, string title, string desc)
+        private static Panel Card(Panel page, int x, int y, int w, int h, string title, string desc)
         {
             var card = new Panel { Location = new Point(x, y), Size = new Size(w, h), BackColor = Color.White };
             var t = new Label { Text = title, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(18, 10), AutoSize = true };
@@ -764,6 +764,13 @@ namespace KimiModelAdder
                 e.Graphics.DrawRectangle(new Pen(Color.FromArgb(228, 231, 236)), 0, 0, card.Width - 1, card.Height - 1);
             };
             page.Controls.Add(card);
+            return card;
+        }
+
+        private static void CardLabel(Panel card, string name, int x, int y)
+        {
+            var l = new Label { Text = name, Location = new Point(x, y), AutoSize = true, ForeColor = TextMain };
+            card.Controls.Add(l);
         }
 
         private void FieldLabel(Panel page, string name, int x, int y, string desc)
@@ -1062,6 +1069,28 @@ namespace KimiModelAdder
         {
             try { System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072 | (System.Net.SecurityProtocolType)12288; } catch { }
             try { Console.OutputEncoding = Encoding.UTF8; } catch { }
+            if (args.Length > 0 && args[0] == "--screenshot")
+            {
+                var dir = args.Length > 1 ? args[1] : ".";
+                var f = new MainForm();
+                f.StartPosition = FormStartPosition.Manual;
+                f.Location = new Point(10, 10);
+                f.Show();
+                Application.DoEvents();
+                for (int pi = 0; pi < 6; pi++)
+                {
+                    f.NavForTest(pi);
+                    Application.DoEvents();
+                    using (var bmp = new Bitmap(f.Width, f.Height))
+                    {
+                        f.DrawToBitmap(bmp, new Rectangle(0, 0, f.Width, f.Height));
+                        bmp.Save(Path.Combine(dir, "page" + (pi + 1) + ".png"));
+                    }
+                }
+                f.Close();
+                Console.WriteLine("screenshots saved to " + dir);
+                return 0;
+            }
             if (args.Length > 0 && args[0] == "--selftest") return SelfTest(args.Length > 1 ? args[1] : null);
             if (args.Length > 0 && args[0] == "--fetchtest")
             {
