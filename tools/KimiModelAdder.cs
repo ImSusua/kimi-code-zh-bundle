@@ -182,6 +182,20 @@ namespace KimiModelAdder
             }
         }
 
+        public static void SetKey(TomlBlock b, string key, string value)
+        {
+            for (int i = 0; i < b.Items.Count; i++)
+            {
+                if (b.Items[i].Key == key) { b.Items[i] = new Kv(key, value); return; }
+            }
+            b.Items.Add(new Kv(key, value));
+        }
+
+        public static void RemoveKey(TomlBlock b, string key)
+        {
+            b.Items.RemoveAll(delegate(Kv kv) { return kv.Key == key; });
+        }
+
         public static void UpsertSection(List<TomlBlock> blocks, string name, List<Kv> items)
         {
             var old = Find(blocks, name);
@@ -324,6 +338,8 @@ namespace KimiModelAdder
         private Button btnSaveTui, btnSaveRaw;
         // 高级
         private TextBox txtFlags, txtRawSection, txtRawBody;
+        private CheckedListBox clbThinkAliases;
+        private CheckBox chkTEffOff, chkTEffLow, chkTEffMedium, chkTEffHigh, chkTAdaptive;
         private TextBox txtLog;
 
         private List<string> allIds = new List<string>();
@@ -347,7 +363,7 @@ namespace KimiModelAdder
             var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, Padding = new Padding(12, 12, 12, 6) };
 
             // 页面（先加入，日志最后加入：最后加入的先完成停靠，日志占据底部，页面填充其余）
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
             {
                 var p = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = PageBg, Visible = false };
                 pages.Add(p);
@@ -365,7 +381,7 @@ namespace KimiModelAdder
             var brand2 = new Label { Text = "配置管理器 · 全中文", Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = TextSub, Location = new Point(20, 48), AutoSize = true };
             sidebar.Controls.Add(brand1);
             sidebar.Controls.Add(brand2);
-            var navTitles = new[] { "  供应商与模型", "  思考与子模型", "  权限模式", "  界面偏好", "  高级", "  使用帮助" };
+            var navTitles = new[] { "  供应商与模型", "  思考与子模型", "  思考强度启用", "  权限模式", "  界面偏好", "  高级", "  使用帮助" };
             for (int i = 0; i < navTitles.Length; i++)
             {
                 var idx = i;
@@ -474,8 +490,28 @@ namespace KimiModelAdder
             var lbl23 = new Label { Text = "留空的键不会写入；修改后新会话生效（当前会话用 /reload）。", Location = new Point(210, 414), AutoSize = true, ForeColor = TextSub };
             p2.Controls.AddRange(new Control[] { btnSaveThink, lbl23 });
 
-            // ================= 页 3：权限模式 =================
-            var p3 = pages[2];
+            // ================= 页 3：模型思考支持 =================
+            var pT = pages[2];
+            PageHeader(pT, "模型思考支持", "中转站的模型实际支持思考、但别名未声明 supportEfforts 时，kimi 里无法设置思考强度 —— 勾选并写入即可");
+            var cT = Card(pT, 16, 80, 676, 268, "模型别名（勾选要启用的）", "来自 config.toml 的 [models.*] 段；已声明的会标注当前档位");
+            clbThinkAliases = new CheckedListBox { Location = new Point(20, 34), Size = new Size(636, 216), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Consolas", 9F) };
+            cT.Controls.Add(clbThinkAliases);
+            var cT2 = Card(pT, 16, 360, 676, 140, "要声明的思考档位", "写入 supportEfforts（同步写入供应商模型条目的 support_efforts）；之后在 kimi 会话内即可切换思考强度");
+            chkTEffOff = new CheckBox { Text = "off", Location = new Point(20, 56), AutoSize = true };
+            chkTEffLow = new CheckBox { Text = "low", Location = new Point(90, 56), AutoSize = true };
+            chkTEffMedium = new CheckBox { Text = "medium", Location = new Point(160, 56), AutoSize = true };
+            chkTEffHigh = new CheckBox { Text = "high", Location = new Point(250, 56), AutoSize = true };
+            chkTEffOff.Checked = chkTEffLow.Checked = chkTEffMedium.Checked = chkTEffHigh.Checked = true;
+            chkTAdaptive = new CheckBox { Text = "adaptiveThinking（模型自适应思考，实验性）", Location = new Point(20, 86), AutoSize = true };
+            cT2.Controls.AddRange(new Control[] { chkTEffOff, chkTEffLow, chkTEffMedium, chkTEffHigh, chkTAdaptive });
+            var btnThinkApply = new Button { Text = "写入思考支持", Location = new Point(16, 514), Size = new Size(180, 36) };
+            StylePrimary(btnThinkApply);
+            var btnThinkRemove = new Button { Text = "移除声明（恢复默认）", Location = new Point(208, 518), Size = new Size(190, 30) };
+            StyleGhost(btnThinkRemove);
+            pT.Controls.AddRange(new Control[] { btnThinkApply, btnThinkRemove });
+
+            // ================= 页 4：权限模式 =================
+            var p3 = pages[3];
             PageHeader(p3, "权限模式", "控制 kimi 执行命令 / 修改文件前要不要先征求你的同意");
             var pc = Card(p3, 16, 80, 676, 210, "permission.mode", null);
             rbManual = new RadioButton { Text = "总是询问（manual）—— 最安全", Location = new Point(20, 32), AutoSize = true, Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold) };
@@ -491,7 +527,7 @@ namespace KimiModelAdder
             p3.Controls.AddRange(new Control[] { btnSavePerm, lblPn });
 
             // ================= 页 4：界面偏好 =================
-            var p4 = pages[3];
+            var p4 = pages[4];
             PageHeader(p4, "界面偏好 (tui.toml)", "调整 kimi 终端界面的外观与行为，重启 kimi 后生效");
             var c6 = Card(p4, 16, 80, 676, 474, "外观与行为", "写入 tui.toml（完整路径见帮助页与日志）");
             int y4 = 56;
@@ -543,7 +579,7 @@ namespace KimiModelAdder
             c6.Controls.Add(btnSaveTui);
 
             // ================= 页 5：高级 =================
-            var p5 = pages[4];
+            var p5 = pages[5];
             PageHeader(p5, "高级", "实验性功能与任意配置段的直接编辑，普通用户可以不用");
             var c7 = Card(p5, 16, 80, 676, 142, "实验性 flags [experimental]", "一行一个，来自官方公告或 /settings");
             txtFlags = new TextBox { Location = new Point(20, 32), Size = new Size(636, 80), Multiline = true, ScrollBars = ScrollBars.Vertical };
@@ -560,7 +596,7 @@ namespace KimiModelAdder
             p5.Controls.Add(lblT5);
 
             // ================= 页 6：帮助 =================
-            var p6 = pages[5];
+            var p6 = pages[6];
             PageHeader(p6, "使用帮助", "常见问题与排错对照");
             var help = new TextBox
             {
@@ -684,6 +720,78 @@ namespace KimiModelAdder
                     MessageBox.Show("界面偏好已写入，重启 kimi 后生效。", "完成");
                 }
                 catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
+            };
+            btnThinkApply.Click += delegate
+            {
+                var efforts = new List<string>();
+                if (chkTEffOff.Checked) efforts.Add("off");
+                if (chkTEffLow.Checked) efforts.Add("low");
+                if (chkTEffMedium.Checked) efforts.Add("medium");
+                if (chkTEffHigh.Checked) efforts.Add("high");
+                if (efforts.Count == 0) { MessageBox.Show("请至少勾选一个思考档位"); return; }
+                var picked = new List<string>();
+                foreach (var it in clbThinkAliases.CheckedItems) picked.Add(((string)it).Split(new[] { "  (" }, StringSplitOptions.None)[0]);
+                if (picked.Count == 0) { MessageBox.Show("请至少勾选一个模型别名"); return; }
+                try
+                {
+                    var blocks = OpenConfig();
+                    int n = 0;
+                    foreach (var name in picked)
+                    {
+                        var b = TomlConfig.Find(blocks, "models." + name);
+                        if (b == null) continue;
+                        var providerId = TomlConfig.GetValue(b, "provider") ?? "";
+                        var modelId = TomlConfig.GetValue(b, "model") ?? "";
+                        TomlConfig.SetKey(b, "supportEfforts", TomlConfig.JoinStringArray(efforts));
+                        if (chkTAdaptive.Checked) TomlConfig.SetKey(b, "adaptiveThinking", "true");
+                        else TomlConfig.RemoveKey(b, "adaptiveThinking");
+                        if (providerId.Length > 0 && modelId.Length > 0)
+                        {
+                            var pn = "providers." + providerId + ".models";
+                            foreach (var pb in blocks)
+                                if (pb.Name == pn && pb.IsArrayTable && TomlConfig.GetValue(pb, "model") == modelId)
+                                    TomlConfig.SetKey(pb, "support_efforts", TomlConfig.JoinStringArray(efforts));
+                        }
+                        n++;
+                    }
+                    TomlConfig.Save(blocks, cfgPath);
+                    Log("已为 " + n + " 个别名写入思考支持 " + TomlConfig.JoinStringArray(efforts) + " ✓");
+                    MessageBox.Show("写入成功！新开一个 kimi 会话，即可在会话内切换思考强度。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    LoadConfigToUi();
+                }
+                catch (Exception ex) { Log("写入失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
+            };
+            btnThinkRemove.Click += delegate
+            {
+                var picked = new List<string>();
+                foreach (var it in clbThinkAliases.CheckedItems) picked.Add(((string)it).Split(new[] { "  (" }, StringSplitOptions.None)[0]);
+                if (picked.Count == 0) { MessageBox.Show("请至少勾选一个模型别名"); return; }
+                try
+                {
+                    var blocks = OpenConfig();
+                    int n = 0;
+                    foreach (var name in picked)
+                    {
+                        var b = TomlConfig.Find(blocks, "models." + name);
+                        if (b == null) continue;
+                        var providerId = TomlConfig.GetValue(b, "provider") ?? "";
+                        var modelId = TomlConfig.GetValue(b, "model") ?? "";
+                        TomlConfig.RemoveKey(b, "supportEfforts");
+                        TomlConfig.RemoveKey(b, "adaptiveThinking");
+                        if (providerId.Length > 0 && modelId.Length > 0)
+                        {
+                            var pn = "providers." + providerId + ".models";
+                            foreach (var pb in blocks)
+                                if (pb.Name == pn && pb.IsArrayTable && TomlConfig.GetValue(pb, "model") == modelId)
+                                    TomlConfig.RemoveKey(pb, "support_efforts");
+                        }
+                        n++;
+                    }
+                    TomlConfig.Save(blocks, cfgPath);
+                    Log("已移除 " + n + " 个别名的思考声明 ✓");
+                    LoadConfigToUi();
+                }
+                catch (Exception ex) { Log("移除失败: " + ex.Message); MessageBox.Show(ex.Message, "错误"); }
             };
             btnSaveRaw.Click += delegate
             {
@@ -820,6 +928,15 @@ namespace KimiModelAdder
                 {
                     var blocks = TomlConfig.Parse(cfgPath);
                     lstProviders.Items.Clear();
+                    clbThinkAliases.Items.Clear();
+                    foreach (var b in blocks)
+                    {
+                        if (!b.Name.StartsWith("models.") || b.IsArrayTable) continue;
+                        var an = b.Name.Substring("models.".Length);
+                        var mdl = TomlConfig.GetValue(b, "model") ?? "";
+                        var eff = TomlConfig.GetValue(b, "supportEfforts");
+                        clbThinkAliases.Items.Add(an + "  (" + mdl + ")" + (eff != null ? "  [已声明: " + eff + "]" : "  [未声明]"), true);
+                    }
                     foreach (var b in blocks)
                         if (b.Name.StartsWith("providers.") && !b.IsArrayTable && !b.Name.Contains("."))
                             lstProviders.Items.Add(b.Name.Substring("providers.".Length));
@@ -1077,7 +1194,7 @@ namespace KimiModelAdder
                 f.Location = new Point(10, 10);
                 f.Show();
                 Application.DoEvents();
-                for (int pi = 0; pi < 6; pi++)
+                for (int pi = 0; pi < 7; pi++)
                 {
                     f.NavForTest(pi);
                     Application.DoEvents();
@@ -1089,6 +1206,31 @@ namespace KimiModelAdder
                 }
                 f.Close();
                 Console.WriteLine("screenshots saved to " + dir);
+                return 0;
+            }
+            if (args.Length > 0 && args[0] == "--think-apply")
+            {
+                var path = args.Length > 1 && args[1].Length > 0 ? args[1] : DefaultConfigPath();
+                var efforts = new List<string> { "off", "low", "medium", "high" };
+                var blocks = TomlConfig.Parse(path);
+                int n = 0;
+                foreach (var b in blocks)
+                {
+                    if (!b.Name.StartsWith("models.") || b.IsArrayTable) continue;
+                    var providerId = TomlConfig.GetValue(b, "provider") ?? "";
+                    var modelId = TomlConfig.GetValue(b, "model") ?? "";
+                    TomlConfig.SetKey(b, "supportEfforts", TomlConfig.JoinStringArray(efforts));
+                    if (providerId.Length > 0 && modelId.Length > 0)
+                    {
+                        var pn = "providers." + providerId + ".models";
+                        foreach (var pb in blocks)
+                            if (pb.Name == pn && pb.IsArrayTable && TomlConfig.GetValue(pb, "model") == modelId)
+                                TomlConfig.SetKey(pb, "support_efforts", TomlConfig.JoinStringArray(efforts));
+                    }
+                    n++;
+                }
+                TomlConfig.Save(blocks, path);
+                Console.WriteLine("OK 已为 " + n + " 个别名写入 supportEfforts");
                 return 0;
             }
             if (args.Length > 0 && args[0] == "--selftest") return SelfTest(args.Length > 1 ? args[1] : null);
@@ -1160,6 +1302,11 @@ namespace KimiModelAdder
 
                 var arr = TomlConfig.ParseStringArray(TomlConfig.JoinStringArray(new List<string> { "model", "context", "a\"b" }));
                 if (arr.Count != 3 || arr[2] != "a\"b") { Console.WriteLine("SELFTEST FAIL (array)"); return 1; }
+                TomlConfig.SetKey(th, "supportEfforts", TomlConfig.JoinStringArray(new List<string> { "off", "low", "medium", "high" }));
+                TomlConfig.Save(third, tmp);
+                var th3 = TomlConfig.Find(TomlConfig.Parse(tmp), "thinking");
+                var effArr = TomlConfig.ParseStringArray(TomlConfig.GetValue(th3, "supportEfforts"));
+                if (effArr.Count != 4 || effArr[3] != "high") { Console.WriteLine("SELFTEST FAIL (supportEfforts)"); return 1; }
 
                 var dupCount = TomlConfig.Parse(tmp).Count(b => b.Name == "providers.zzselftest");
                 if (dupCount != 1) { Console.WriteLine("SELFTEST FAIL (idempotent)"); return 1; }
