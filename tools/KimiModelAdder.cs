@@ -340,6 +340,7 @@ namespace KimiModelAdder
         private TextBox txtFlags, txtRawSection, txtRawBody;
         private CheckedListBox clbThinkAliases;
         private CheckBox chkTEffOff, chkTEffLow, chkTEffMedium, chkTEffHigh, chkTAdaptive;
+        private TextBox txtOffEffort;
         private TextBox txtLog;
 
         private List<string> allIds = new List<string>();
@@ -496,14 +497,17 @@ namespace KimiModelAdder
             var cT = Card(pT, 16, 80, 676, 268, "模型别名（勾选要启用的）", "来自 config.toml 的 [models.*] 段；已声明的会标注当前档位");
             clbThinkAliases = new CheckedListBox { Location = new Point(20, 34), Size = new Size(636, 216), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Consolas", 9F) };
             cT.Controls.Add(clbThinkAliases);
-            var cT2 = Card(pT, 16, 360, 676, 140, "要声明的思考档位", "写入 supportEfforts（同步写入供应商模型条目的 support_efforts）；之后在 kimi 会话内即可切换思考强度");
+            var cT2 = Card(pT, 16, 360, 676, 170, "要声明的思考档位", "写入 supportEfforts（同步写入供应商模型条目的 support_efforts）；之后在 kimi 会话内即可切换思考强度");
             chkTEffOff = new CheckBox { Text = "off", Location = new Point(20, 56), AutoSize = true };
             chkTEffLow = new CheckBox { Text = "low", Location = new Point(90, 56), AutoSize = true };
             chkTEffMedium = new CheckBox { Text = "medium", Location = new Point(160, 56), AutoSize = true };
             chkTEffHigh = new CheckBox { Text = "high", Location = new Point(250, 56), AutoSize = true };
             chkTEffOff.Checked = chkTEffLow.Checked = chkTEffMedium.Checked = chkTEffHigh.Checked = true;
             chkTAdaptive = new CheckBox { Text = "adaptiveThinking（模型自适应思考，实验性）", Location = new Point(20, 86), AutoSize = true };
-            cT2.Controls.AddRange(new Control[] { chkTEffOff, chkTEffLow, chkTEffMedium, chkTEffHigh, chkTAdaptive });
+            var lblOff = new Label { Text = "offEffort:", Location = new Point(20, 118), AutoSize = true, ForeColor = TextMain };
+            txtOffEffort = new TextBox { Location = new Point(120, 114), Width = 120, Text = "none" };
+            var lblOffN = new Label { Text = "关闭思考时发送的档位（模型\u201c默认思考\u201d时必须声明，如 none）；留空 = 不写", Location = new Point(250, 118), AutoSize = true, ForeColor = TextSub };
+            cT2.Controls.AddRange(new Control[] { chkTEffOff, chkTEffLow, chkTEffMedium, chkTEffHigh, chkTAdaptive, lblOff, txtOffEffort, lblOffN });
             var btnThinkApply = new Button { Text = "写入思考支持", Location = new Point(16, 514), Size = new Size(180, 36) };
             StylePrimary(btnThinkApply);
             var btnThinkRemove = new Button { Text = "移除声明（恢复默认）", Location = new Point(208, 518), Size = new Size(190, 30) };
@@ -780,6 +784,9 @@ namespace KimiModelAdder
                         TomlConfig.SetKey(b, "supportEfforts", TomlConfig.JoinStringArray(efforts));
                         if (chkTAdaptive.Checked) TomlConfig.SetKey(b, "adaptiveThinking", "true");
                         else TomlConfig.RemoveKey(b, "adaptiveThinking");
+                        var oe = txtOffEffort.Text.Trim();
+                        if (oe.Length > 0) TomlConfig.SetKey(b, "offEffort", TomlConfig.Q(oe));
+                        else TomlConfig.RemoveKey(b, "offEffort");
                         if (providerId.Length > 0 && modelId.Length > 0)
                         {
                             var pn = "providers." + providerId + ".models";
@@ -813,6 +820,7 @@ namespace KimiModelAdder
                         var modelId = TomlConfig.GetValue(b, "model") ?? "";
                         TomlConfig.RemoveKey(b, "supportEfforts");
                         TomlConfig.RemoveKey(b, "adaptiveThinking");
+                        TomlConfig.RemoveKey(b, "offEffort");
                         if (providerId.Length > 0 && modelId.Length > 0)
                         {
                             var pn = "providers." + providerId + ".models";
@@ -1263,6 +1271,7 @@ namespace KimiModelAdder
                     var providerId = TomlConfig.GetValue(b, "provider") ?? "";
                     var modelId = TomlConfig.GetValue(b, "model") ?? "";
                     TomlConfig.SetKey(b, "supportEfforts", TomlConfig.JoinStringArray(efforts));
+                    TomlConfig.SetKey(b, "offEffort", TomlConfig.Q("none"));
                     if (providerId.Length > 0 && modelId.Length > 0)
                     {
                         var pn = "providers." + providerId + ".models";
@@ -1346,10 +1355,12 @@ namespace KimiModelAdder
                 var arr = TomlConfig.ParseStringArray(TomlConfig.JoinStringArray(new List<string> { "model", "context", "a\"b" }));
                 if (arr.Count != 3 || arr[2] != "a\"b") { Console.WriteLine("SELFTEST FAIL (array)"); return 1; }
                 TomlConfig.SetKey(th, "supportEfforts", TomlConfig.JoinStringArray(new List<string> { "off", "low", "medium", "high" }));
+                TomlConfig.SetKey(th, "offEffort", TomlConfig.Q("none"));
                 TomlConfig.Save(third, tmp);
                 var th3 = TomlConfig.Find(TomlConfig.Parse(tmp), "thinking");
                 var effArr = TomlConfig.ParseStringArray(TomlConfig.GetValue(th3, "supportEfforts"));
                 if (effArr.Count != 4 || effArr[3] != "high") { Console.WriteLine("SELFTEST FAIL (supportEfforts)"); return 1; }
+                if (TomlConfig.GetValue(th3, "offEffort") != "none") { Console.WriteLine("SELFTEST FAIL (offEffort)"); return 1; }
 
                 var dupCount = TomlConfig.Parse(tmp).Count(b => b.Name == "providers.zzselftest");
                 if (dupCount != 1) { Console.WriteLine("SELFTEST FAIL (idempotent)"); return 1; }
